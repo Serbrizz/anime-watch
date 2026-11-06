@@ -37,7 +37,7 @@ class RecommendationService(
         }
         if (results.all { it.isFailure }) throw results.first().exceptionOrNull()!!
         val candidates = results.flatMap { it.getOrDefault(emptyList()) }.distinctBy { it.id }
-        animeRepo.remember(candidates)
+        animeRepo.cache(candidates)
 
         val ranked = RecommendationEngine.rank(candidates, profile, excludeIds)
 

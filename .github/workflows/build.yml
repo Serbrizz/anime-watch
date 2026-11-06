@@ -17,9 +17,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.9
-      # Il vero google-services.json non è nel repo: in CI basta il segnaposto.
-      - name: Config Firebase segnaposto
-        run: cp app/google-services.json.example app/google-services.json
       - name: Unit test
         run: gradle :app:testDebugUnitTest
       - name: Build debug

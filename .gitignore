@@ -12,9 +12,6 @@ captures/
 *.jks
 *.keystore
 
-# Firebase: config reale (usa il file .example come modello)
-app/google-services.json
-
 # Sistema
 .DS_Store
 Thumbs.db

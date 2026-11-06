@@ -1,6 +1,12 @@
 package com.example.animewatch.data.model
 
+import kotlinx.serialization.Serializable
+
+/** Un giorno in millisecondi, per i TTL della cache. */
+private const val DAY_MS = 24L * 60 * 60 * 1000
+
 /** Scheda anime: copia normalizzata dei dati AniList (e documento della cache condivisa). */
+@Serializable
 data class Anime(
     val id: Int,
     /** Titolo romaji (sempre presente). */
@@ -39,13 +45,10 @@ data class Anime(
         val ttl = if (isFinished) 30L * DAY_MS else DAY_MS / 2
         return now - cachedAt > ttl
     }
-
-    private companion object {
-        const val DAY_MS = 24L * 60 * 60 * 1000
-    }
 }
 
 /** Progresso di un utente su una scheda anime. Una sola copia, condivisa da tutte le liste. */
+@Serializable
 data class WatchProgress(
     val animeId: Int,
     val watchedEpisodes: Set<Int> = emptySet(),
@@ -64,6 +67,7 @@ data class WatchProgress(
 }
 
 /** Lista personale di anime da vedere. Contiene solo gli ID: i dati stanno nella cache. */
+@Serializable
 data class AnimeList(
     val id: String,
     val name: String,

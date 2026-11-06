@@ -1,27 +1,33 @@
 package com.example.animewatch.di
 
+import android.content.Context
 import com.example.animewatch.BuildConfig
 import com.example.animewatch.data.AnimeRepository
-import com.example.animewatch.data.firebase.UserDataSource
+import com.example.animewatch.data.UserStore
+import com.example.animewatch.data.local.JsonAnimeStore
+import com.example.animewatch.data.local.JsonStore
+import com.example.animewatch.data.local.JsonUserStore
 import com.example.animewatch.data.remote.anilist.AniListApi
 import com.example.animewatch.data.remote.anilist.AniListClient
 import com.example.animewatch.data.remote.openrouter.OpenRouterApi
 import com.example.animewatch.domain.LlmReranker
 import com.example.animewatch.domain.RecommendationService
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
+import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
  * Composition root manuale: l'app ha ~6 dipendenze, un framework di DI (Hilt) aggiungerebbe
  * più complessità (plugin KSP, annotazioni) di quanta ne tolga.
  */
-class AppContainer {
+class AppContainer(context: Context) {
     private val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true // null su campo non-null con default => usa il default
@@ -59,10 +65,16 @@ class AppContainer {
         }
 
     private val aniListClient = AniListClient(aniListApi)
-    private val db: FirebaseFirestore = FirebaseFirestore.getInstance()
 
-    val userData = UserDataSource(FirebaseAuth.getInstance(), db)
-    val animeRepo = AnimeRepository(aniListClient, db)
+    // ---- PERSISTENZA TEMPORANEA ----------------------------------------------------------
+    // Quando il database vero è pronto: sostituire queste righe con le sue implementazioni di
+    // UserStore e AnimeStore ed eliminare data/local/ (vedi data/Stores.kt).
+    private val persistenceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val files = JsonStore(File(context.filesDir, "database"))
+    val userStore: UserStore = JsonUserStore(files, persistenceScope)
+    val animeRepo = AnimeRepository(aniListClient, JsonAnimeStore(files, persistenceScope))
+    // --------------------------------------------------------------------------------------
+
     val recommender = RecommendationService(
         aniList = aniListClient,
         animeRepo = animeRepo,

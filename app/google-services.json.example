@@ -1,0 +1,19 @@
+{
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "animewatch-example",
+    "storage_bucket": "animewatch-example.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+        "android_client_info": { "package_name": "com.example.animewatch" }
+      },
+      "oauth_client": [],
+      "api_key": [ { "current_key": "AIzaSyEXAMPLE-REPLACE-WITH-YOUR-OWN-KEY00" } ],
+      "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+    }
+  ],
+  "configuration_version": "1"
+}

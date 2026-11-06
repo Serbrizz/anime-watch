@@ -1,0 +1,26 @@
+name: Android build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+      # Il vero google-services.json non è nel repo: in CI basta il segnaposto.
+      - name: Config Firebase segnaposto
+        run: cp app/google-services.json.example app/google-services.json
+      - name: Unit test
+        run: gradle :app:testDebugUnitTest
+      - name: Build debug
+        run: gradle :app:assembleDebug

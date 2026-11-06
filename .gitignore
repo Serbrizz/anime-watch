@@ -1,0 +1,20 @@
+# Gradle / Android
+.gradle/
+build/
+*.iml
+.idea/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.jks
+*.keystore
+
+# Firebase: config reale (usa il file .example come modello)
+app/google-services.json
+
+# Sistema
+.DS_Store
+Thumbs.db

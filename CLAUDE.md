@@ -196,3 +196,10 @@ GraphQL non sono state provate contro il server reale. Al primo import in Androi
 - Ogni nuova query AniList passa da `AniListClient` e restituisce `Anime`; ogni nuovo campo di `Anime` va aggiunto a DTO, mapper Firestore e **regole Firestore** (`hasOnly`).
 - I commenti spiegano il *perché* di una scelta non ovvia, non ripetono il codice.
 - Mai committare `google-services.json`, `local.properties`, keystore.
+
+## 12. Git
+
+- Si lavora su `dev`; `main` è il branch di rilascio. Le release partono da `main` dopo un merge di `dev`.
+- Messaggi di commit: una sola riga, Conventional Commits con gitmoji, in inglese, all'imperativo e in minuscolo, senza scope, body o trailer (niente `Co-Authored-By`). Brevi e diretti: cosa cambia, non perché né come. Esempi: `feat: ✨ add deploy for tagged releases`, `fix: 🐛 display sign-in errors`, `feat: ✨ use checkboxes for dish markers`.
+- Le modifiche a questo file (`CLAUDE.md`) vanno nel commit che implementa ciò che descrivono: niente commit `docs` separati, niente fixup del commit che le ha introdotte.
+- Commit, push e riscritture della history solo su richiesta.

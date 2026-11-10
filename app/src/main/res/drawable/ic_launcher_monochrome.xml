@@ -1,35 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Versione a tinta unica (icone a tema di Android 13+ e logo della schermata di login): l'iride è un
-     foro nella forma dell'occhio (evenOdd) e il clip toglie la parte di iride che uscirebbe dalle palpebre. -->
+<!-- Versione a tinta unica (icone a tema di Android 13+ e logo della schermata di login): il blocco appunti con la
+     checklist e il tasto play al centro dell'icona a colori. Con un solo colore non si può "cancellare", quindi lo
+     stacco attorno al play è un clip: rettangolo intero meno un triangolo più largo percorso in senso opposto
+     (regola nonZero = foro). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group>
-        <clip-path android:pathData="M29,58 C31,42 66,30 80,46 C80,62 66,73 51,73 C39,73 31,66 29,58 Z" />
+    <group
+        android:translateX="-2"
+        android:translateY="-2">
+        <group>
+            <clip-path android:pathData="M0,0 H108 V108 H0 Z M56.5,55.9 L56.5,90.1 L86,73 Z" />
+            <path
+                android:pathData="M38,32 H62 A6,6 0 0 1 68,38 V72 A6,6 0 0 1 62,78 H38 A6,6 0 0 1 32,72 V38 A6,6 0 0 1 38,32 Z"
+                android:strokeWidth="4"
+                android:strokeColor="#FFFFFF" />
+            <path
+                android:fillColor="#FFFFFF"
+                android:pathData="M45,27 H55 A3,3 0 0 1 58,30 V37 H42 V30 A3,3 0 0 1 45,27 Z" />
+            <path
+                android:pathData="M37.5,46 L40.5,49 L45.5,43 M37.5,56 L40.5,59 L45.5,53 M49.5,46 H61 M49.5,56 H55 M49.5,66 H54"
+                android:strokeWidth="3"
+                android:strokeColor="#FFFFFF"
+                android:strokeLineCap="round"
+                android:strokeLineJoin="round" />
+            <path
+                android:pathData="M38.8,66 A3.2,3.2 0 1 0 45.2,66 A3.2,3.2 0 1 0 38.8,66 Z"
+                android:strokeWidth="2.5"
+                android:strokeColor="#FFFFFF" />
+        </group>
         <path
             android:fillColor="#FFFFFF"
-            android:fillType="evenOdd"
-            android:pathData="M29,58 C31,42 66,30 80,46 C80,62 66,73 51,73 C39,73 31,66 29,58 Z M42,56.5 a14,17.5 0 1,0 28,0 a14,17.5 0 1,0 -28,0" />
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M56,48 Q57.3,55.2 64.5,56.5 Q57.3,57.8 56,65 Q54.7,57.8 47.5,56.5 Q54.7,55.2 56,48 Z M44.4,46.5 a4.6,4.6 0 1,0 9.2,0 a4.6,4.6 0 1,0 -9.2,0" />
+            android:pathData="M60,62 L79,73 L60,84 Z"
+            android:strokeWidth="2"
+            android:strokeColor="#FFFFFF"
+            android:strokeLineJoin="round" />
     </group>
-    <path
-        android:pathData="M29,58 C31,42 66,30 80,46"
-        android:strokeWidth="6"
-        android:strokeColor="#FFFFFF"
-        android:strokeLineCap="round" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M75,40 L84.5,36 L81,46 Z M79,45 L87,45.5 L81,51 Z" />
-    <path
-        android:pathData="M62,72.5 Q71.5,71 77.5,63.5"
-        android:strokeWidth="2.6"
-        android:strokeColor="#FFFFFF"
-        android:strokeLineCap="round" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M70,24.5 Q70.7,28.8 75,29.5 Q70.7,30.2 70,34.5 Q69.3,30.2 65,29.5 Q69.3,28.8 70,24.5 Z M33,30 Q33.5,33 36.5,33.5 Q33.5,34 33,37 Q32.5,34 29.5,33.5 Q32.5,33 33,30 Z" />
 </vector>

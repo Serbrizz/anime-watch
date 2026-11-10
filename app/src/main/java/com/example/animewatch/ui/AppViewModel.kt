@@ -1,11 +1,13 @@
 package com.example.animewatch.ui
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.animewatch.data.model.Anime
 import com.example.animewatch.data.model.AnimeList
 import com.example.animewatch.data.model.WatchProgress
 import com.example.animewatch.di.AppContainer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -14,9 +16,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+sealed interface AuthState {
+    /** Firebase non ha ancora detto se c'è una sessione salvata: dura una frazione di secondo all'avvio. */
+    data object Loading : AuthState
+    data object SignedOut : AuthState
+    data class SignedIn(val uid: String) : AuthState
+}
 
 /**
  * Stato condiviso da tutte le schermate: utente, liste, progressi e schede anime in memoria.
@@ -26,46 +36,81 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppViewModel(private val container: AppContainer) : ViewModel() {
 
-    private val uid = MutableStateFlow<String?>(null)
+    val authState: StateFlow<AuthState> = container.auth.currentUid
+        .map { if (it == null) AuthState.SignedOut else AuthState.SignedIn(it) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AuthState.Loading)
+
+    private val uid: StateFlow<String?> = authState
+        .map { (it as? AuthState.SignedIn)?.uid }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    private val _signingIn = MutableStateFlow(false)
+    val signingIn: StateFlow<Boolean> = _signingIn.asStateFlow()
+    private val _loginError = MutableStateFlow<String?>(null)
+    val loginError: StateFlow<String?> = _loginError.asStateFlow()
+
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    // Il catch sta dentro flatMapLatest: un errore chiude solo il flusso di quell'utente, non quello
+    // esterno, così dopo un nuovo accesso la sincronizzazione riparte.
     val lists: StateFlow<List<AnimeList>> = uid
         .flatMapLatest { u ->
-            if (u == null) flowOf(emptyList<AnimeList>()) else container.userData.observeLists(u)
-        }
-        .catch {
-            _error.value = "Sincronizzazione delle liste non riuscita: ${it.message}"
-            emit(emptyList())
+            if (u == null) {
+                flowOf(emptyList())
+            } else {
+                container.userData.observeLists(u).catch {
+                    reportSyncError(u, "Sincronizzazione delle liste non riuscita: ${it.message}")
+                    emit(emptyList())
+                }
+            }
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val progress: StateFlow<Map<Int, WatchProgress>> = uid
         .flatMapLatest { u ->
-            if (u == null) flowOf(emptyMap<Int, WatchProgress>()) else container.userData.observeProgress(u)
-        }
-        .catch {
-            _error.value = "Sincronizzazione dei progressi non riuscita: ${it.message}"
-            emit(emptyMap())
+            if (u == null) {
+                flowOf(emptyMap())
+            } else {
+                container.userData.observeProgress(u).catch {
+                    reportSyncError(u, "Sincronizzazione dei progressi non riuscita: ${it.message}")
+                    emit(emptyMap())
+                }
+            }
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     private val _anime = MutableStateFlow<Map<Int, Anime>>(emptyMap())
     val anime: StateFlow<Map<Int, Anime>> = _anime.asStateFlow()
 
-    init {
-        signIn()
+    /** All'uscita i listener del vecchio utente possono fallire per permessi: quell'errore non va mostrato. */
+    private fun reportSyncError(forUid: String, message: String) {
+        if (uid.value == forUid) _error.value = message
     }
 
-    fun signIn() {
+    // ---------- Accesso ----------
+
+    /** Il context dell'Activity serve solo per mostrare il selettore degli account, non viene conservato. */
+    fun signInWithGoogle(activityContext: Context) {
+        if (_signingIn.value) return
         viewModelScope.launch {
-            runCatching { container.userData.ensureSignedIn() }
-                .onSuccess {
-                    uid.value = it
-                    _error.value = null
-                }
-                .onFailure { _error.value = "Accesso a Firebase non riuscito: ${it.message}" }
+            _signingIn.value = true
+            _loginError.value = null
+            try {
+                container.auth.signInWithGoogle(activityContext)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _loginError.value = "Accesso non riuscito: ${e.message}"
+            } finally {
+                _signingIn.value = false
+            }
         }
+    }
+
+    fun signOut() {
+        _error.value = null
+        viewModelScope.launch { container.auth.signOut() }
     }
 
     fun dismissError() {

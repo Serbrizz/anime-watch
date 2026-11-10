@@ -3,7 +3,6 @@ package com.example.animewatch.data.firebase
 import android.util.Log
 import com.example.animewatch.data.model.AnimeList
 import com.example.animewatch.data.model.WatchProgress
-import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.CollectionReference
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -11,7 +10,6 @@ import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.tasks.await
 
 /**
  * Dati personali su Firestore:
@@ -21,16 +19,7 @@ import kotlinx.coroutines.tasks.await
  * Le scritture NON sono attese (niente await): Firestore le applica subito alla cache
  * locale e le sincronizza appena c'è rete. Un await bloccherebbe la UI offline.
  */
-class UserDataSource(
-    private val auth: FirebaseAuth,
-    private val db: FirebaseFirestore,
-) {
-    /** Login anonimo: nessuna schermata, ma l'UID resta stabile finché non si disinstalla l'app. */
-    suspend fun ensureSignedIn(): String {
-        auth.currentUser?.let { return it.uid }
-        return auth.signInAnonymously().await().user?.uid
-            ?: error("Login anonimo senza utente")
-    }
+class UserDataSource(private val db: FirebaseFirestore) {
 
     private fun listsCol(uid: String): CollectionReference =
         db.collection("users").document(uid).collection("lists")

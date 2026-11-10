@@ -1,7 +1,9 @@
 package com.example.animewatch.di
 
+import android.content.Context
 import com.example.animewatch.BuildConfig
 import com.example.animewatch.data.AnimeRepository
+import com.example.animewatch.data.firebase.AuthDataSource
 import com.example.animewatch.data.firebase.UserDataSource
 import com.example.animewatch.data.remote.anilist.AniListApi
 import com.example.animewatch.data.remote.anilist.AniListClient
@@ -21,7 +23,7 @@ import java.util.concurrent.TimeUnit
  * Composition root manuale: l'app ha ~6 dipendenze, un framework di DI (Hilt) aggiungerebbe
  * più complessità (plugin KSP, annotazioni) di quanta ne tolga.
  */
-class AppContainer {
+class AppContainer(context: Context) {
     private val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true // null su campo non-null con default => usa il default
@@ -61,7 +63,8 @@ class AppContainer {
     private val aniListClient = AniListClient(aniListApi)
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance()
 
-    val userData = UserDataSource(FirebaseAuth.getInstance(), db)
+    val auth = AuthDataSource(FirebaseAuth.getInstance(), context.applicationContext)
+    val userData = UserDataSource(db)
     val animeRepo = AnimeRepository(aniListClient, db)
     val recommender = RecommendationService(
         aniList = aniListClient,

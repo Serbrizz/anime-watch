@@ -2,6 +2,7 @@ package com.example.animewatch.ui
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -38,6 +39,7 @@ import com.example.animewatch.di.AppContainer
 import com.example.animewatch.ui.detail.AnimeDetailScreen
 import com.example.animewatch.ui.lists.ListDetailScreen
 import com.example.animewatch.ui.lists.ListsScreen
+import com.example.animewatch.ui.login.LoginScreen
 import com.example.animewatch.ui.recs.RecommendationsScreen
 import com.example.animewatch.ui.recs.RecommendationsViewModel
 import com.example.animewatch.ui.search.SearchScreen
@@ -67,6 +69,19 @@ fun AnimeWatchRoot(container: AppContainer) {
     val appVm: AppViewModel = viewModel(factory = viewModelFactory {
         initializer { AppViewModel(container) }
     })
+    val authState by appVm.authState.collectAsStateWithLifecycle()
+
+    when (authState) {
+        // Sfondo vuoto per un istante, così all'avvio non lampeggia il login se la sessione c'è già.
+        AuthState.Loading -> Surface(Modifier.fillMaxSize()) {}
+        AuthState.SignedOut -> LoginScreen(appVm)
+        // La navigazione vive qui dentro: all'uscita viene scartata e il prossimo accesso riparte da Liste.
+        is AuthState.SignedIn -> MainContent(container, appVm)
+    }
+}
+
+@Composable
+private fun MainContent(container: AppContainer, appVm: AppViewModel) {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val destination = backStack?.destination
@@ -104,7 +119,6 @@ fun AnimeWatchRoot(container: AppContainer) {
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier.weight(1f),
                         )
-                        TextButton(onClick = appVm::signIn) { Text("Riprova") }
                         TextButton(onClick = appVm::dismissError) { Text("Chiudi") }
                     }
                 }

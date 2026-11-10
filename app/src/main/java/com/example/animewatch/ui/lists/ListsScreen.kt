@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
@@ -52,7 +53,16 @@ fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
     LaunchedEffect(lists) { vm.ensureAnime(lists.flatMap { it.animeIds }) }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Le mie liste") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Le mie liste") },
+                actions = {
+                    IconButton(onClick = vm::signOut) {
+                        Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Esci")
+                    }
+                },
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(onClick = { showCreate = true }) {
                 Icon(Icons.Default.Add, contentDescription = "Nuova lista")

@@ -19,6 +19,7 @@ anime consigliati in base ai generi già guardati. Dati anime da AniList, dati u
 6. **Consigliati.** Sezione con anime dai generi simili a quelli già guardati (algoritmo in §7), esclusi quelli già in lista o iniziati.
    Riordino opzionale con un LLM via OpenRouter, che aggiunge un motivo in italiano per ogni consiglio.
 7. **Offline.** Liste e progressi si leggono e si modificano anche senza rete (cache locale di Firestore) e si sincronizzano dopo.
+8. **Accesso.** Solo con account Google, da una schermata di login al primo avvio; la sessione resta finché l'utente non tocca "Esci".
 
 Fuori scopo per ora: notifiche sulle nuove puntate, streaming/link ai player, social, tracciamento dei voti personali.
 
@@ -31,7 +32,8 @@ Fuori scopo per ora: notifiche sulle nuove puntate, streaming/link ai player, so
 | Navigazione | Navigation Compose, rotte stringa | 2.8.2 |
 | Architettura | MVVM, `StateFlow`, un `AppViewModel` condiviso + un ViewModel per Cerca e per Consigliati | Lifecycle 2.8.6 |
 | DI | Manuale (`di/AppContainer.kt`), niente Hilt | — |
-| Backend utente | Firebase Auth (anonimo) + Cloud Firestore | BoM 33.4.0 |
+| Backend utente | Firebase Auth (solo Google) + Cloud Firestore | BoM 33.4.0 |
+| Accesso Google | Credential Manager (`androidx.credentials`) + Google ID | 1.3.0 / 1.1.1 |
 | Dati anime | AniList GraphQL, `https://graphql.anilist.co/` | pubblico, senza chiave |
 | LLM (opzionale) | OpenRouter, `https://openrouter.ai/api/v1/` | chiave in `local.properties` |
 | Rete | Retrofit + OkHttp + kotlinx.serialization | 2.11.0 / 4.12.0 / 1.7.3 |
@@ -62,7 +64,8 @@ app/src/main/java/com/example/animewatch/
 ├─ data/
 │  ├─ model/Models.kt          Anime, WatchProgress, AnimeList (+ regole: stagione completa, cache scaduta)
 │  ├─ AnimeRepository.kt       memoria -> Firestore `anime/` -> AniList
-│  ├─ firebase/UserDataSource  login anonimo, liste, progressi (flussi in tempo reale)
+│  ├─ firebase/AuthDataSource  accesso con Google (Credential Manager -> Firebase), uscita, stato utente
+│  ├─ firebase/UserDataSource  liste, progressi (flussi in tempo reale)
 │  ├─ firebase/Mappers.kt      modelli <-> documenti Firestore
 │  └─ remote/
 │     ├─ anilist/              AniListApi (1 endpoint POST), AniListClient (query), DTO
@@ -72,10 +75,10 @@ app/src/main/java/com/example/animewatch/
 │  ├─ RecommendationService    candidati da AniList -> ranking -> riordino AI opzionale
 │  └─ LlmReranker              prompt a OpenRouter, parsing JSON, fallback
 └─ ui/
-   ├─ AnimeWatchRoot.kt        NavHost + bottom bar (Liste / Cerca / Consigliati) + banner errori
+   ├─ AnimeWatchRoot.kt        login se non c'è utente, altrimenti NavHost + bottom bar + banner errori
    ├─ AppViewModel.kt          utente, liste, progressi, cache schede, azioni
    ├─ components/Common.kt     AnimeRow, CoverImage, AddToListDialog, EmptyState
-   ├─ lists/  detail/  search/  recs/   una cartella per schermata
+   ├─ login/  lists/  detail/  search/  recs/   una cartella per schermata
    └─ theme/Theme.kt
 ```
 
@@ -86,7 +89,8 @@ importare nulla di Android (resta testabile sulla JVM).
 
 | Rotta | Contenuto |
 |---|---|
-| `lists` | Elenco liste (n. anime, n. stagioni viste), FAB "nuova lista", elimina con conferma |
+| — (login) | Fuori dal NavHost: logo, pulsante "Accedi con Google", errore. Compare finché non c'è un utente |
+| `lists` | Elenco liste (n. anime, n. stagioni viste), FAB "nuova lista", elimina con conferma, "Esci" nella barra |
 | `list/{listId}` | Anime della lista con barra di avanzamento e spunta se stagione vista; rimuovi dalla lista |
 | `anime/{animeId}` | Copertina, generi, trama, griglia di chip per puntata, "Segna tutte"/"Azzera", "Aggiungi a una lista" |
 | `search` | Campo di ricerca, risultati con "+" per aggiungere a una lista |
@@ -146,11 +150,15 @@ non può inventare titoli. Ogni anomalia (rete, JSON non valido, ID sconosciuti)
 
 ### Firebase (obbligatorio)
 1. Console Firebase -> nuovo progetto -> aggiungi app Android con package `com.example.animewatch`.
-2. Scarica `google-services.json` in `app/` (è nel `.gitignore`; `app/google-services.json.example` mostra il formato).
-3. Authentication -> metodo di accesso -> abilita **Anonimo**.
-4. Firestore Database -> crea in modalità produzione, poi pubblica le regole: `firebase deploy --only firestore:rules`
+2. Authentication -> metodo di accesso -> abilita **Google** (crea il client OAuth web usato dall'app).
+3. Registra lo SHA-1 del keystore che firma l'APK (debug: `keytool -list -v -keystore ~/.android/debug.keystore
+   -alias androiddebugkey -storepass android`) con `firebase apps:android:sha:create <APP_ID> <SHA1>` o dalle
+   impostazioni dell'app in console. Senza, il selettore Google fallisce. Per la release va aggiunto anche lo SHA-1 di release.
+4. Scarica `google-services.json` in `app/` **dopo** i passi 2 e 3, altrimenti manca il client OAuth (`oauth_client` vuoto)
+   e l'accesso dà "client OAuth mancante". È nel `.gitignore`; `app/google-services.json.example` mostra il formato.
+5. Firestore Database -> crea in modalità produzione, poi pubblica le regole: `firebase deploy --only firestore:rules`
    (usa `firebase.json` e `firestore.rules`) oppure incollale nella console.
-5. Se cambi il package name, aggiornalo in `app/build.gradle.kts` (namespace e applicationId) e nella console Firebase.
+6. Se cambi il package name, aggiornalo in `app/build.gradle.kts` (namespace e applicationId) e nella console Firebase.
 
 ### OpenRouter (opzionale)
 Copia `local.properties.example` in `local.properties` e imposta `OPENROUTER_API_KEY` (e se vuoi `OPENROUTER_MODEL`).
@@ -171,9 +179,9 @@ Android Studio (Koala o successivo) apre la cartella e fa tutto da solo. La CI (
   OpenRouter; per distribuire l'app la chiamata deve passare da un proxy (Cloud Function) che custodisce la chiave.
 - **Cache `anime/` scrivibile dai client.** Le regole limitano forma e tipi ma un utente malevolo potrebbe scrivere dati falsi
   su un ID. Mitigazione futura: Firebase App Check, oppure scrittura solo da Cloud Function.
-- **Login anonimo.** Nessuna schermata di accesso, ma disinstallando l'app l'UID, e quindi le liste, si perdono.
-  Evoluzione prevista: collegare l'account anonimo a Google (`linkWithCredential`) per recuperare i dati su altri dispositivi.
-- **Primo avvio offline.** L'accesso anonimo richiede rete la prima volta: l'app mostra un banner con "Riprova".
+- **Solo accesso con Google.** L'UID è legato all'account Google, quindi liste e progressi seguono l'utente su ogni
+  dispositivo e sopravvivono alla disinstallazione. Niente accesso anonimo né email/password.
+- **Primo accesso offline.** Il primo accesso richiede rete; dopo, Firebase conserva la sessione e l'app si apre anche offline.
 - **Sequel nei consigli.** Se l'utente guarda S1, la S2 (stessi generi) può comparire tra i consigliati. Soluzione prevista:
   leggere `relations` da AniList ed escludere le schede collegate a ciò che è già visto.
 - **Titoli adulti.** Esclusi con `isAdult: false` lato AniList.

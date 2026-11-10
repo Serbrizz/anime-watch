@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Versione a tinta unica (icone a tema di Android 13+ e logo della schermata di login): l'iride è un
+     foro nella forma dell'occhio (evenOdd) e il clip toglie la parte di iride che uscirebbe dalle palpebre. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group>
+        <clip-path android:pathData="M29,58 C31,42 66,30 80,46 C80,62 66,73 51,73 C39,73 31,66 29,58 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillType="evenOdd"
+            android:pathData="M29,58 C31,42 66,30 80,46 C80,62 66,73 51,73 C39,73 31,66 29,58 Z M42,56.5 a14,17.5 0 1,0 28,0 a14,17.5 0 1,0 -28,0" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M56,48 Q57.3,55.2 64.5,56.5 Q57.3,57.8 56,65 Q54.7,57.8 47.5,56.5 Q54.7,55.2 56,48 Z M44.4,46.5 a4.6,4.6 0 1,0 9.2,0 a4.6,4.6 0 1,0 -9.2,0" />
+    </group>
+    <path
+        android:pathData="M29,58 C31,42 66,30 80,46"
+        android:strokeWidth="6"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M75,40 L84.5,36 L81,46 Z M79,45 L87,45.5 L81,51 Z" />
+    <path
+        android:pathData="M62,72.5 Q71.5,71 77.5,63.5"
+        android:strokeWidth="2.6"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M70,24.5 Q70.7,28.8 75,29.5 Q70.7,30.2 70,34.5 Q69.3,30.2 65,29.5 Q69.3,28.8 70,24.5 Z M33,30 Q33.5,33 36.5,33.5 Q33.5,34 33,37 Q32.5,34 29.5,33.5 Q32.5,33 33,30 Z" />
+</vector>

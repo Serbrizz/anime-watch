@@ -41,7 +41,7 @@ fun SearchScreen(
     onOpenAnime: (Int) -> Unit,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val lists by appVm.lists.collectAsStateWithLifecycle()
+    val lists by appVm.editableLists.collectAsStateWithLifecycle()
     var addTarget by remember { mutableStateOf<Anime?>(null) }
 
     Scaffold(topBar = { TopAppBar(title = { Text("Cerca anime") }) }) { padding ->

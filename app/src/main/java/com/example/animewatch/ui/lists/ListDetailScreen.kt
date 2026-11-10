@@ -11,12 +11,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -35,11 +37,14 @@ fun ListDetailScreen(
     listId: String,
     onBack: () -> Unit,
     onOpenAnime: (Int) -> Unit,
+    onOpenMembers: () -> Unit,
 ) {
     val lists by vm.lists.collectAsStateWithLifecycle()
     val progress by vm.progress.collectAsStateWithLifecycle()
     val animeMap by vm.anime.collectAsStateWithLifecycle()
+    val me by vm.user.collectAsStateWithLifecycle()
     val list = lists.firstOrNull { it.id == listId }
+    val canEdit = list?.canEdit(me?.uid) == true
 
     LaunchedEffect(list?.animeIds) { list?.let { vm.ensureAnime(it.animeIds) } }
 
@@ -52,19 +57,44 @@ fun ListDetailScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro")
                     }
                 },
+                actions = {
+                    if (list != null) {
+                        IconButton(onClick = onOpenMembers) {
+                            Icon(Icons.Default.Share, contentDescription = "Condivisione e membri")
+                        }
+                    }
+                },
             )
         },
     ) { padding ->
         when {
+            // Succede anche quando il proprietario la elimina o ci rimuove mentre siamo qui.
             list == null -> EmptyState("Lista non trovata.", Modifier.padding(padding))
             list.animeIds.isEmpty() -> EmptyState(
-                "Lista vuota. Cerca un anime e aggiungilo con il pulsante +.",
+                if (canEdit) "Lista vuota. Cerca un anime e aggiungilo con il pulsante +."
+                else "Lista vuota. Puoi solo visualizzarla: gli anime li aggiunge chi ha il permesso di modifica.",
                 Modifier.padding(padding),
             )
             else -> LazyColumn(
                 modifier = Modifier.padding(padding),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             ) {
+                if (!canEdit) {
+                    item(key = "viewer") {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        ) {
+                            Text(
+                                "Sola visualizzazione: puoi segnare le tue puntate, ma non modificare la lista.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(12.dp),
+                            )
+                        }
+                    }
+                }
                 items(list.animeIds, key = { it }) { id ->
                     val anime = animeMap[id]
                     if (anime == null) {
@@ -88,8 +118,10 @@ fun ListDetailScreen(
                                         tint = MaterialTheme.colorScheme.primary,
                                     )
                                 }
-                                IconButton(onClick = { vm.removeFromList(list.id, id) }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Rimuovi dalla lista")
+                                if (canEdit) {
+                                    IconButton(onClick = { vm.removeFromList(list.id, id) }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Rimuovi dalla lista")
+                                    }
                                 }
                             },
                         ) {

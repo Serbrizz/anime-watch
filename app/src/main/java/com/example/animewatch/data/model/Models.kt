@@ -63,10 +63,74 @@ data class WatchProgress(
         }
 }
 
-/** Lista personale di anime da vedere. Contiene solo gli ID: i dati stanno nella cache. */
+/** Utente collegato, dall'account Google. L'email è sempre minuscola: è la chiave degli inviti. */
+data class UserProfile(
+    val uid: String,
+    val name: String,
+    val email: String,
+    val photoUrl: String?,
+)
+
+/** Ruolo in una lista. Il valore `key` è quello salvato su Firestore e controllato dalle regole. */
+enum class ListRole(val key: String) {
+    OWNER("owner"),
+    EDITOR("editor"),
+    VIEWER("viewer");
+
+    val canEdit: Boolean get() = this != VIEWER
+
+    companion object {
+        fun fromKey(key: String?): ListRole? = entries.firstOrNull { it.key == key }
+    }
+}
+
+/** Nome e foto di un membro, copiati nella lista perché un utente non può leggere il profilo di un altro. */
+data class MemberProfile(val name: String, val photoUrl: String?)
+
+/**
+ * Lista di anime, personale o condivisa. Contiene solo gli ID: i dati stanno nella cache.
+ * Il proprietario la crea ed è l'unico a gestire membri e inviti.
+ */
 data class AnimeList(
     val id: String,
     val name: String,
     val createdAt: Long,
     val animeIds: List<Int>,
-)
+    val ownerId: String,
+    val members: Map<String, ListRole>,
+    val profiles: Map<String, MemberProfile> = emptyMap(),
+) {
+    fun roleOf(uid: String?): ListRole? = uid?.let { members[it] }
+
+    fun canEdit(uid: String?): Boolean = roleOf(uid)?.canEdit == true
+
+    fun isOwner(uid: String?): Boolean = roleOf(uid) == ListRole.OWNER
+
+    /** Condivisa = c'è almeno un membro oltre al proprietario. */
+    val isShared: Boolean get() = members.size > 1
+}
+
+/**
+ * Invito in attesa verso una persona, identificata dall'email del suo account Google.
+ * L'ID è `listId_email`: un solo invito per persona e lista, e le regole lo ricostruiscono senza leggerlo.
+ */
+data class ListInvite(
+    val listId: String,
+    val listName: String,
+    val role: ListRole,
+    val fromUid: String,
+    val fromName: String,
+    val toEmail: String,
+    val createdAt: Long,
+) {
+    val id: String get() = inviteId(listId, toEmail)
+
+    companion object {
+        fun inviteId(listId: String, email: String): String = "${listId}_${email.trim().lowercase()}"
+
+        /** Controllo minimo (qualcosa@dominio.tld, senza spazi né `/`, vietato negli ID Firestore). */
+        fun isPlausibleEmail(email: String): Boolean = EMAIL.matches(email)
+
+        private val EMAIL = Regex("^[^@\\s/]+@[^@\\s/]+\\.[^@\\s/]+$")
+    }
+}

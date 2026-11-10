@@ -2,6 +2,10 @@ package com.example.animewatch.data.firebase
 
 import com.example.animewatch.data.model.Anime
 import com.example.animewatch.data.model.AnimeList
+import com.example.animewatch.data.model.ListInvite
+import com.example.animewatch.data.model.ListRole
+import com.example.animewatch.data.model.MemberProfile
+import com.example.animewatch.data.model.UserProfile
 import com.example.animewatch.data.model.WatchProgress
 import com.google.firebase.firestore.DocumentSnapshot
 
@@ -54,13 +58,58 @@ fun DocumentSnapshot.toAnime(): Anime? {
 
 fun DocumentSnapshot.toAnimeList(): AnimeList? {
     if (!exists()) return null
+    val members = (get("members") as? Map<*, *>).orEmpty()
+        .mapNotNull { (uid, role) -> ListRole.fromKey(role as? String)?.let { (uid as String) to it } }
+        .toMap()
+    val profiles = (get("profiles") as? Map<*, *>).orEmpty()
+        .mapNotNull { (uid, value) ->
+            val p = value as? Map<*, *> ?: return@mapNotNull null
+            val name = p["name"] as? String ?: return@mapNotNull null
+            (uid as String) to MemberProfile(name, p["photoUrl"] as? String)
+        }
+        .toMap()
     return AnimeList(
         id = id,
         name = getString("name") ?: return null,
         createdAt = getLong("createdAt") ?: 0L,
         animeIds = intList("animeIds"),
+        ownerId = getString("ownerId") ?: return null,
+        members = members,
+        profiles = profiles,
     )
 }
+
+/** Il campo `photoUrl` si omette se manca, come per gli altri campi null. */
+fun UserProfile.toMemberMap(): Map<String, Any> = buildMap {
+    put("name", name.take(MAX_NAME))
+    photoUrl?.let { put("photoUrl", it) }
+}
+
+fun ListInvite.toMap(): Map<String, Any> = mapOf(
+    "listId" to listId,
+    "listName" to listName,
+    "role" to role.key,
+    "fromUid" to fromUid,
+    "fromName" to fromName.take(MAX_NAME),
+    "toEmail" to toEmail,
+    "createdAt" to createdAt,
+)
+
+fun DocumentSnapshot.toListInvite(): ListInvite? {
+    if (!exists()) return null
+    return ListInvite(
+        listId = getString("listId") ?: return null,
+        listName = getString("listName") ?: "",
+        role = ListRole.fromKey(getString("role")) ?: return null,
+        fromUid = getString("fromUid") ?: return null,
+        fromName = getString("fromName") ?: "",
+        toEmail = getString("toEmail") ?: return null,
+        createdAt = getLong("createdAt") ?: 0L,
+    )
+}
+
+/** Stesso limite delle regole Firestore sui nomi. */
+const val MAX_NAME = 100
 
 fun WatchProgress.toMap(): Map<String, Any> = mapOf(
     "animeId" to animeId,

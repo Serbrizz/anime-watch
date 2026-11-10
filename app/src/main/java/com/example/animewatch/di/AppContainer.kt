@@ -4,6 +4,7 @@ import android.content.Context
 import com.example.animewatch.BuildConfig
 import com.example.animewatch.data.AnimeRepository
 import com.example.animewatch.data.firebase.AuthDataSource
+import com.example.animewatch.data.firebase.ListDataSource
 import com.example.animewatch.data.firebase.UserDataSource
 import com.example.animewatch.data.remote.anilist.AniListApi
 import com.example.animewatch.data.remote.anilist.AniListClient
@@ -65,6 +66,7 @@ class AppContainer(context: Context) {
 
     val auth = AuthDataSource(FirebaseAuth.getInstance(), context.applicationContext)
     val userData = UserDataSource(db)
+    val listData = ListDataSource(db)
     val animeRepo = AnimeRepository(aniListClient, db)
     val recommender = RecommendationService(
         aniList = aniListClient,

@@ -1,19 +1,28 @@
 package com.example.animewatch.ui
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.animewatch.data.model.Anime
 import com.example.animewatch.data.model.AnimeList
+import com.example.animewatch.data.model.ListInvite
+import com.example.animewatch.data.model.ListRole
+import com.example.animewatch.data.model.UserProfile
 import com.example.animewatch.data.model.WatchProgress
 import com.example.animewatch.di.AppContainer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -25,24 +34,26 @@ sealed interface AuthState {
     /** Firebase non ha ancora detto se c'è una sessione salvata: dura una frazione di secondo all'avvio. */
     data object Loading : AuthState
     data object SignedOut : AuthState
-    data class SignedIn(val uid: String) : AuthState
+    data class SignedIn(val user: UserProfile) : AuthState
 }
 
 /**
- * Stato condiviso da tutte le schermate: utente, liste, progressi e schede anime in memoria.
+ * Stato condiviso da tutte le schermate: utente, liste, inviti, progressi e schede anime in memoria.
  * Liste e progressi arrivano da Firestore come flussi in tempo reale (anche offline, dalla cache
  * locale), quindi la UI non deve mai "ricaricare" dopo una modifica.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppViewModel(private val container: AppContainer) : ViewModel() {
 
-    val authState: StateFlow<AuthState> = container.auth.currentUid
+    val authState: StateFlow<AuthState> = container.auth.currentUser
         .map { if (it == null) AuthState.SignedOut else AuthState.SignedIn(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, AuthState.Loading)
 
-    private val uid: StateFlow<String?> = authState
-        .map { (it as? AuthState.SignedIn)?.uid }
+    val user: StateFlow<UserProfile?> = authState
+        .map { (it as? AuthState.SignedIn)?.user }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    private val uid: String? get() = user.value?.uid
 
     private val _signingIn = MutableStateFlow(false)
     val signingIn: StateFlow<Boolean> = _signingIn.asStateFlow()
@@ -52,40 +63,56 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    // Il catch sta dentro flatMapLatest: un errore chiude solo il flusso di quell'utente, non quello
-    // esterno, così dopo un nuovo accesso la sincronizzazione riparte.
-    val lists: StateFlow<List<AnimeList>> = uid
-        .flatMapLatest { u ->
-            if (u == null) {
-                flowOf(emptyList())
-            } else {
-                container.userData.observeLists(u).catch {
-                    reportSyncError(u, "Sincronizzazione delle liste non riuscita: ${it.message}")
-                    emit(emptyList())
-                }
-            }
-        }
+    /** Tutte le liste di cui l'utente è membro: sue e condivise con lui. */
+    val lists: StateFlow<List<AnimeList>> = perUser(emptyList(), "delle liste") { container.listData.observeLists(it.uid) }
+
+    /** Solo le liste in cui l'utente può aggiungere anime (non quelle in sola visualizzazione). */
+    val editableLists: StateFlow<List<AnimeList>> = combine(lists, user) { all, u -> all.filter { it.canEdit(u?.uid) } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val progress: StateFlow<Map<Int, WatchProgress>> = uid
-        .flatMapLatest { u ->
-            if (u == null) {
-                flowOf(emptyMap())
-            } else {
-                container.userData.observeProgress(u).catch {
-                    reportSyncError(u, "Sincronizzazione dei progressi non riuscita: ${it.message}")
-                    emit(emptyMap())
-                }
-            }
-        }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+    val incomingInvites: StateFlow<List<ListInvite>> =
+        perUser(emptyList(), "degli inviti") { container.listData.observeIncomingInvites(it.email) }
+
+    val progress: StateFlow<Map<Int, WatchProgress>> =
+        perUser(emptyMap(), "dei progressi") { container.userData.observeProgress(it.uid) }
 
     private val _anime = MutableStateFlow<Map<Int, Anime>>(emptyMap())
     val anime: StateFlow<Map<Int, Anime>> = _anime.asStateFlow()
 
+    /** Invito che si sta accettando (per mostrare l'attesa sul pulsante giusto). */
+    private val _accepting = MutableStateFlow<String?>(null)
+    val accepting: StateFlow<String?> = _accepting.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            user.filterNotNull().distinctUntilChangedBy { it.uid }.collect { u ->
+                runCatching { container.listData.migrateLegacyLists(u) }
+                    .onFailure { if (it is CancellationException) throw it else Log.w(TAG, "Migrazione liste", it) }
+            }
+        }
+    }
+
+    /**
+     * Flusso legato all'utente collegato. Il catch sta dentro flatMapLatest: un errore chiude solo il
+     * flusso di quell'utente, non quello esterno, così dopo un nuovo accesso la sincronizzazione riparte.
+     */
+    private fun <T> perUser(empty: T, what: String, source: (UserProfile) -> Flow<T>): StateFlow<T> = user
+        .distinctUntilChangedBy { it?.uid }
+        .flatMapLatest { u ->
+            if (u == null) {
+                flowOf(empty)
+            } else {
+                source(u).catch {
+                    reportSyncError(u.uid, "Sincronizzazione $what non riuscita: ${it.message}")
+                    emit(empty)
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, empty)
+
     /** All'uscita i listener del vecchio utente possono fallire per permessi: quell'errore non va mostrato. */
     private fun reportSyncError(forUid: String, message: String) {
-        if (uid.value == forUid) _error.value = message
+        if (uid == forUid) _error.value = message
     }
 
     // ---------- Accesso ----------
@@ -130,26 +157,79 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     // ---------- Liste ----------
 
     fun createList(name: String) {
-        val u = uid.value ?: return
+        val u = user.value ?: return
         val clean = name.trim()
-        if (clean.isNotEmpty()) container.userData.createList(u, clean)
+        if (clean.isNotEmpty()) container.listData.createList(u, clean)
     }
 
-    fun deleteList(listId: String) {
-        val u = uid.value ?: return
-        container.userData.deleteList(u, listId)
+    /** Il proprietario la elimina per tutti; gli altri membri escono soltanto. */
+    fun deleteOrLeaveList(list: AnimeList) {
+        val u = uid ?: return
+        if (list.isOwner(u)) {
+            viewModelScope.launch { container.listData.deleteList(u, list.id) }
+        } else {
+            container.listData.removeMember(list.id, u)
+        }
     }
 
     fun addToList(listId: String, anime: Anime) {
-        val u = uid.value ?: return
         container.animeRepo.cache(listOf(anime)) // la scheda entra nella cache condivisa
-        container.userData.addToList(u, listId, anime.id)
+        container.listData.addToList(listId, anime.id)
         _anime.update { it + (anime.id to anime) }
     }
 
     fun removeFromList(listId: String, animeId: Int) {
-        val u = uid.value ?: return
-        container.userData.removeFromList(u, listId, animeId)
+        container.listData.removeFromList(listId, animeId)
+    }
+
+    // ---------- Condivisione ----------
+
+    fun sendInvite(list: AnimeList, email: String, role: ListRole) {
+        val u = user.value ?: return
+        if (list.isOwner(u.uid)) container.listData.sendInvite(list, u, email, role)
+    }
+
+    fun revokeInvite(invite: ListInvite) = container.listData.deleteInvite(invite)
+
+    fun declineInvite(invite: ListInvite) = container.listData.deleteInvite(invite)
+
+    fun acceptInvite(invite: ListInvite) {
+        val u = user.value ?: return
+        if (_accepting.value != null) return
+        // Già membro (es. invitato due volte): le regole rifiuterebbero l'ingresso, basta togliere l'invito.
+        if (lists.value.any { it.id == invite.listId }) {
+            container.listData.deleteInvite(invite)
+            return
+        }
+        viewModelScope.launch {
+            _accepting.value = invite.id
+            try {
+                container.listData.acceptInvite(invite, u)
+            } catch (e: TimeoutCancellationException) {
+                _error.value = "Per accettare un invito serve la connessione."
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Invito non accettato", e)
+                _error.value = "Invito non più valido: la lista potrebbe essere stata eliminata."
+            } finally {
+                _accepting.value = null
+            }
+        }
+    }
+
+    fun setMemberRole(list: AnimeList, memberUid: String, role: ListRole) {
+        if (list.isOwner(uid) && memberUid != list.ownerId) container.listData.setMemberRole(list.id, memberUid, role)
+    }
+
+    fun removeMember(list: AnimeList, memberUid: String) {
+        if (list.isOwner(uid) && memberUid != list.ownerId) container.listData.removeMember(list.id, memberUid)
+    }
+
+    /** Inviti in attesa mandati per una lista: servono solo nella schermata dei membri. */
+    fun outgoingInvites(listId: String): Flow<List<ListInvite>> {
+        val u = uid ?: return flowOf(emptyList())
+        return container.listData.observeOutgoingInvites(u, listId).catch { emit(emptyList()) }
     }
 
     // ---------- Puntate e stagioni ----------
@@ -165,7 +245,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     fun clearProgress(anime: Anime) = save(anime, emptySet())
 
     private fun save(anime: Anime, watched: Set<Int>) {
-        val u = uid.value ?: return
+        val u = uid ?: return
         container.userData.saveProgress(
             u,
             WatchProgress(
@@ -176,5 +256,9 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 updatedAt = System.currentTimeMillis(),
             ),
         )
+    }
+
+    private companion object {
+        const val TAG = "AppViewModel"
     }
 }

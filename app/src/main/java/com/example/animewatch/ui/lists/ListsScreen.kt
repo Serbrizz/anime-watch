@@ -6,15 +6,25 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -38,14 +48,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.animewatch.data.model.AnimeList
+import com.example.animewatch.data.model.ListRole
 import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.EmptyState
+import com.example.animewatch.ui.components.roleLabel
 
 @Composable
-fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
+fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit, onOpenInvites: () -> Unit) {
     val lists by vm.lists.collectAsStateWithLifecycle()
     val progress by vm.progress.collectAsStateWithLifecycle()
     val animeMap by vm.anime.collectAsStateWithLifecycle()
+    val invites by vm.incomingInvites.collectAsStateWithLifecycle()
+    val me by vm.user.collectAsStateWithLifecycle()
     var showCreate by rememberSaveable { mutableStateOf(false) }
     var toDelete by remember { mutableStateOf<AnimeList?>(null) }
 
@@ -57,6 +71,11 @@ fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
             TopAppBar(
                 title = { Text("Le mie liste") },
                 actions = {
+                    IconButton(onClick = onOpenInvites) {
+                        BadgedBox(badge = { if (invites.isNotEmpty()) Badge { Text("${invites.size}") } }) {
+                            Icon(Icons.Default.Email, contentDescription = "Inviti")
+                        }
+                    }
                     IconButton(onClick = vm::signOut) {
                         Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Esci")
                     }
@@ -69,7 +88,7 @@ fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
             }
         },
     ) { padding ->
-        if (lists.isEmpty()) {
+        if (lists.isEmpty() && invites.isEmpty()) {
             EmptyState(
                 "Nessuna lista. Tocca + per crearne una, poi aggiungi anime dalla scheda Cerca.",
                 Modifier.padding(padding),
@@ -80,6 +99,25 @@ fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (invites.isNotEmpty()) {
+                    item(key = "invites") {
+                        Card(
+                            onClick = onOpenInvites,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Email, contentDescription = null)
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    if (invites.size == 1) "Hai un invito a una lista condivisa"
+                                    else "Hai ${invites.size} inviti a liste condivise",
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                            }
+                        }
+                    }
+                }
                 items(lists, key = { it.id }) { list ->
                     val seen = list.animeIds.count { id ->
                         animeMap[id]?.isSeasonComplete(progress[id]?.watchedEpisodes?.size ?: 0) == true
@@ -96,9 +134,14 @@ fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                SharedMarker(list, me?.uid)
                             }
                             IconButton(onClick = { toDelete = list }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Elimina lista")
+                                if (list.isOwner(me?.uid)) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Elimina lista")
+                                } else {
+                                    Icon(Icons.Default.Close, contentDescription = "Esci dalla lista")
+                                }
                             }
                         }
                     }
@@ -134,17 +177,51 @@ fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
     }
 
     toDelete?.let { list ->
+        val owner = list.isOwner(me?.uid)
         AlertDialog(
             onDismissRequest = { toDelete = null },
-            title = { Text("Eliminare \"${list.name}\"?") },
-            text = { Text("Verrà rimossa solo la lista: i progressi sulle puntate restano salvati.") },
+            title = { Text(if (owner) "Eliminare \"${list.name}\"?" else "Uscire da \"${list.name}\"?") },
+            text = {
+                Text(
+                    when {
+                        !owner -> "La lista sparirà dalle tue liste; per rientrare servirà un nuovo invito. " +
+                            "I tuoi progressi sulle puntate restano salvati."
+                        list.isShared -> "La lista verrà eliminata anche per gli altri membri. " +
+                            "I progressi sulle puntate restano salvati."
+                        else -> "Verrà rimossa solo la lista: i progressi sulle puntate restano salvati."
+                    }
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    vm.deleteList(list.id)
+                    vm.deleteOrLeaveList(list)
                     toDelete = null
-                }) { Text("Elimina") }
+                }) { Text(if (owner) "Elimina" else "Esci") }
             },
             dismissButton = { TextButton(onClick = { toDelete = null }) { Text("Annulla") } },
         )
+    }
+}
+
+/** Contrassegno delle liste condivise: chi l'ha condivisa (o quanti membri) e il proprio ruolo. */
+@Composable
+private fun SharedMarker(list: AnimeList, myUid: String?) {
+    val role = list.roleOf(myUid) ?: return
+    if (!list.isShared && role == ListRole.OWNER) return
+    val text = if (role == ListRole.OWNER) {
+        "Condivisa · ${list.members.size} membri"
+    } else {
+        val owner = list.profiles[list.ownerId]?.name ?: "un altro utente"
+        "Condivisa da $owner · ${roleLabel(role)}"
+    }
+    Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            Icons.Default.Share,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
     }
 }

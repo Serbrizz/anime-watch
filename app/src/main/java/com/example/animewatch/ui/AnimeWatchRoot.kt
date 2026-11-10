@@ -37,7 +37,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.animewatch.di.AppContainer
 import com.example.animewatch.ui.detail.AnimeDetailScreen
+import com.example.animewatch.ui.invites.InvitesScreen
 import com.example.animewatch.ui.lists.ListDetailScreen
+import com.example.animewatch.ui.lists.ListMembersScreen
 import com.example.animewatch.ui.lists.ListsScreen
 import com.example.animewatch.ui.login.LoginScreen
 import com.example.animewatch.ui.recs.RecommendationsScreen
@@ -50,8 +52,11 @@ private object Routes {
     const val SEARCH = "search"
     const val RECS = "recs"
     const val LIST_DETAIL = "list/{listId}"
+    const val LIST_MEMBERS = "list/{listId}/members"
     const val ANIME_DETAIL = "anime/{animeId}"
+    const val INVITES = "invites"
     fun list(id: String) = "list/$id"
+    fun listMembers(id: String) = "list/$id/members"
     fun anime(id: Int) = "anime/$id"
 }
 
@@ -126,7 +131,14 @@ private fun MainContent(container: AppContainer, appVm: AppViewModel) {
 
             NavHost(nav, startDestination = Routes.LISTS, modifier = Modifier.weight(1f)) {
                 composable(Routes.LISTS) {
-                    ListsScreen(appVm, onOpenList = { nav.navigate(Routes.list(it)) })
+                    ListsScreen(
+                        appVm,
+                        onOpenList = { nav.navigate(Routes.list(it)) },
+                        onOpenInvites = { nav.navigate(Routes.INVITES) },
+                    )
+                }
+                composable(Routes.INVITES) {
+                    InvitesScreen(appVm, onBack = { nav.popBackStack() })
                 }
                 composable(Routes.SEARCH) {
                     val searchVm: SearchViewModel = viewModel(factory = viewModelFactory {
@@ -141,11 +153,22 @@ private fun MainContent(container: AppContainer, appVm: AppViewModel) {
                     RecommendationsScreen(appVm, recsVm, onOpenAnime = { nav.navigate(Routes.anime(it)) })
                 }
                 composable(Routes.LIST_DETAIL) { entry ->
+                    val listId = entry.arguments?.getString("listId").orEmpty()
                     ListDetailScreen(
+                        vm = appVm,
+                        listId = listId,
+                        onBack = { nav.popBackStack() },
+                        onOpenAnime = { nav.navigate(Routes.anime(it)) },
+                        onOpenMembers = { nav.navigate(Routes.listMembers(listId)) },
+                    )
+                }
+                composable(Routes.LIST_MEMBERS) { entry ->
+                    ListMembersScreen(
                         vm = appVm,
                         listId = entry.arguments?.getString("listId").orEmpty(),
                         onBack = { nav.popBackStack() },
-                        onOpenAnime = { nav.navigate(Routes.anime(it)) },
+                        // Dopo "Esci dalla lista" si torna alle liste, non al dettaglio di una lista non più nostra.
+                        onLeft = { nav.popBackStack(Routes.LISTS, inclusive = false) },
                     )
                 }
                 composable(

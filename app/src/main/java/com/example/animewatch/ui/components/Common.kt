@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.animewatch.data.model.Anime
 import com.example.animewatch.data.model.AnimeList
+import com.example.animewatch.data.model.ListRole
 
 fun statusLabel(status: String?): String = when (status) {
     "FINISHED" -> "Concluso"
@@ -41,6 +43,38 @@ fun statusLabel(status: String?): String = when (status) {
     "CANCELLED" -> "Cancellato"
     "HIATUS" -> "In pausa"
     else -> "Stato sconosciuto"
+}
+
+fun roleLabel(role: ListRole): String = when (role) {
+    ListRole.OWNER -> "Proprietario"
+    ListRole.EDITOR -> "Modifica"
+    ListRole.VIEWER -> "Sola visualizzazione"
+}
+
+/** Foto dell'account Google; se manca, l'iniziale del nome su un cerchio colorato. */
+@Composable
+fun MemberAvatar(name: String, photoUrl: String?, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            name.firstOrNull()?.uppercase() ?: "?",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+        if (photoUrl != null) {
+            AsyncImage(
+                model = photoUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+            )
+        }
+    }
 }
 
 @Composable
@@ -111,7 +145,7 @@ fun AddToListDialog(
         title = { Text("Aggiungi a lista") },
         text = {
             if (lists.isEmpty()) {
-                Text("Non hai ancora nessuna lista: creane una dalla scheda Liste.")
+                Text("Non hai liste in cui aggiungere anime: creane una dalla scheda Liste.")
             } else {
                 Column {
                     lists.forEach { list ->

@@ -54,7 +54,7 @@ import com.example.animewatch.ui.components.statusLabel
 fun AnimeDetailScreen(vm: AppViewModel, animeId: Int, onBack: () -> Unit) {
     val animeMap by vm.anime.collectAsStateWithLifecycle()
     val progress by vm.progress.collectAsStateWithLifecycle()
-    val lists by vm.lists.collectAsStateWithLifecycle()
+    val lists by vm.editableLists.collectAsStateWithLifecycle()
     val anime = animeMap[animeId]
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var expanded by rememberSaveable { mutableStateOf(false) }

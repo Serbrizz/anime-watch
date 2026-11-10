@@ -48,6 +48,7 @@ fun RecommendationsScreen(
 ) {
     val progress by appVm.progress.collectAsStateWithLifecycle()
     val lists by appVm.lists.collectAsStateWithLifecycle()
+    val editableLists by appVm.editableLists.collectAsStateWithLifecycle()
     val animeMap by appVm.anime.collectAsStateWithLifecycle()
     val state by vm.state.collectAsStateWithLifecycle()
     var useLlm by rememberSaveable { mutableStateOf(false) }
@@ -138,7 +139,7 @@ fun RecommendationsScreen(
     addTarget?.let { anime ->
         AddToListDialog(
             anime = anime,
-            lists = lists,
+            lists = editableLists,
             onToggle = { list, add ->
                 if (add) appVm.addToList(list.id, anime) else appVm.removeFromList(list.id, anime.id)
             },

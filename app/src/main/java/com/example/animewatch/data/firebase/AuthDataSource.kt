@@ -10,7 +10,9 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.example.animewatch.data.model.UserProfile
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -25,12 +27,20 @@ class AuthDataSource(
     private val auth: FirebaseAuth,
     private val appContext: Context,
 ) {
-    /** UID dell'utente collegato, `null` se nessuno. Emette subito lo stato corrente. */
-    val currentUid: Flow<String?> = callbackFlow {
-        val listener = FirebaseAuth.AuthStateListener { trySend(it.currentUser?.uid) }
+    /** Utente collegato, `null` se nessuno. Emette subito lo stato corrente. */
+    val currentUser: Flow<UserProfile?> = callbackFlow {
+        val listener = FirebaseAuth.AuthStateListener { trySend(it.currentUser?.toProfile()) }
         auth.addAuthStateListener(listener)
         awaitClose { auth.removeAuthStateListener(listener) }
     }
+
+    private fun FirebaseUser.toProfile() = UserProfile(
+        uid = uid,
+        name = displayName?.takeIf { it.isNotBlank() } ?: email.orEmpty().substringBefore('@'),
+        // Minuscola come nelle regole (`request.auth.token.email.lower()`): è la chiave degli inviti.
+        email = email.orEmpty().trim().lowercase(),
+        photoUrl = photoUrl?.toString(),
+    )
 
     /**
      * Mostra il selettore degli account Google. Serve il context di un'Activity: il selettore è una UI.

@@ -20,8 +20,14 @@ anime consigliati in base ai generi già guardati. Dati anime da AniList, dati u
    Riordino opzionale con un LLM via OpenRouter, che aggiunge un motivo in italiano per ogni consiglio.
 7. **Offline.** Liste e progressi si leggono e si modificano anche senza rete (cache locale di Firestore) e si sincronizzano dopo.
 8. **Accesso.** Solo con account Google, da una schermata di login al primo avvio; la sessione resta finché l'utente non tocca "Esci".
+9. **Liste condivise.** Il proprietario invita una persona scrivendo l'email del suo account Google e scegliendo
+   *modifica* (aggiunge/toglie anime) o *visualizzazione* (sola lettura). L'invito compare nella sezione **Inviti**
+   del destinatario, che lo accetta o lo rifiuta; non scade, resta finché non viene accettato, rifiutato o ritirato.
+   Accettata, la lista sta fra le sue con un contrassegno "Condivisa". Il progresso resta personale (punto 4):
+   ognuno vede le proprie puntate. Ruoli e permessi in §5.
 
-Fuori scopo per ora: notifiche sulle nuove puntate, streaming/link ai player, social, tracciamento dei voti personali.
+Fuori scopo per ora: notifiche sulle nuove puntate (anche per gli inviti), streaming/link ai player, social oltre alle
+liste condivise (commenti, profili pubblici), tracciamento dei voti personali, trasferimento della proprietà di una lista.
 
 ## 2. Stack
 
@@ -62,10 +68,11 @@ app/src/main/java/com/example/animewatch/
 ├─ MainActivity.kt             setContent { Theme { AnimeWatchRoot } }
 ├─ di/AppContainer.kt          costruisce Retrofit, Firestore, repository, servizi
 ├─ data/
-│  ├─ model/Models.kt          Anime, WatchProgress, AnimeList (+ regole: stagione completa, cache scaduta)
+│  ├─ model/Models.kt          Anime, WatchProgress, AnimeList, ListRole, ListInvite, UserProfile (+ regole di dominio)
 │  ├─ AnimeRepository.kt       memoria -> Firestore `anime/` -> AniList
-│  ├─ firebase/AuthDataSource  accesso con Google (Credential Manager -> Firebase), uscita, stato utente
-│  ├─ firebase/UserDataSource  liste, progressi (flussi in tempo reale)
+│  ├─ firebase/AuthDataSource  accesso con Google (Credential Manager -> Firebase), uscita, profilo utente
+│  ├─ firebase/ListDataSource  liste (anche condivise), membri, inviti, migrazione dal vecchio formato
+│  ├─ firebase/UserDataSource  progressi (flussi in tempo reale)
 │  ├─ firebase/Mappers.kt      modelli <-> documenti Firestore
 │  └─ remote/
 │     ├─ anilist/              AniListApi (1 endpoint POST), AniListClient (query), DTO
@@ -76,9 +83,9 @@ app/src/main/java/com/example/animewatch/
 │  └─ LlmReranker              prompt a OpenRouter, parsing JSON, fallback
 └─ ui/
    ├─ AnimeWatchRoot.kt        login se non c'è utente, altrimenti NavHost + bottom bar + banner errori
-   ├─ AppViewModel.kt          utente, liste, progressi, cache schede, azioni
-   ├─ components/Common.kt     AnimeRow, CoverImage, AddToListDialog, EmptyState
-   ├─ login/  lists/  detail/  search/  recs/   una cartella per schermata
+   ├─ AppViewModel.kt          utente, liste, inviti, progressi, cache schede, azioni
+   ├─ components/Common.kt     AnimeRow, CoverImage, MemberAvatar, AddToListDialog, EmptyState, etichette
+   ├─ login/  lists/  invites/  detail/  search/  recs/   una cartella per schermata
    └─ theme/Theme.kt
 ```
 
@@ -90,8 +97,10 @@ importare nulla di Android (resta testabile sulla JVM).
 | Rotta | Contenuto |
 |---|---|
 | — (login) | Fuori dal NavHost: logo, pulsante "Accedi con Google", errore. Compare finché non c'è un utente |
-| `lists` | Elenco liste (n. anime, n. stagioni viste), FAB "nuova lista", elimina con conferma, "Esci" nella barra |
-| `list/{listId}` | Anime della lista con barra di avanzamento e spunta se stagione vista; rimuovi dalla lista |
+| `lists` | Elenco liste (n. anime, n. stagioni viste, contrassegno "Condivisa"), FAB "nuova lista", elimina (proprietario) o esci (altri) con conferma; nella barra "Inviti" con contatore ed "Esci" dall'account |
+| `list/{listId}` | Anime della lista con barra di avanzamento e spunta se stagione vista; rimuovi dalla lista solo con permesso di modifica; icona condivisione |
+| `list/{listId}/members` | Membri con ruolo. Proprietario: invito per email + ruolo, inviti in attesa da ritirare, cambia ruolo / rimuovi membro. Altri: "Esci dalla lista" |
+| `invites` | Inviti ricevuti: lista, chi invita, ruolo; "Accetta" / "Rifiuta" |
 | `anime/{animeId}` | Copertina, generi, trama, griglia di chip per puntata, "Segna tutte"/"Azzera", "Aggiungi a una lista" |
 | `search` | Campo di ricerca, risultati con "+" per aggiungere a una lista |
 | `recs` | Generi dominanti, interruttore "Affina con AI" (solo se la chiave c'è), elenco con affinità % e motivo |
@@ -106,21 +115,51 @@ anime/{anilistId}                    CACHE CONDIVISA fra tutti gli utenti
   id, title, titleEnglish?, coverUrl?, genres[], episodes?, airedEpisodes?,
   status?, season?, seasonYear?, averageScore?, description?, cachedAt (ms)
 
-users/{uid}/lists/{listId}           una lista personale
-  name, createdAt (ms), animeIds[]   (arrayUnion/arrayRemove: niente duplicati)
+lists/{listId}                       una lista, personale o condivisa
+  name, ownerId, createdAt (ms), updatedAt (ms), animeIds[]   (arrayUnion/arrayRemove: niente duplicati)
+  members   { uid: "owner" | "editor" | "viewer" }            i permessi (le regole leggono da qui)
+  memberIds [uid…]                                            copia delle chiavi di members, per la query array-contains
+  profiles  { uid: { name, photoUrl? } }                      nome e foto da mostrare; ognuno scrive il proprio
+
+invites/{listId}_{email}             invito in attesa verso un account Google
+  listId, listName, role ("editor" | "viewer"), fromUid, fromName, toEmail (minuscola), createdAt (ms)
 
 users/{uid}/progress/{anilistId}     un documento per anime con almeno una puntata vista
   animeId, watchedEpisodes[], genres[], totalEpisodes, updatedAt (ms)
 ```
+
+**Ruoli.**
+
+| | Proprietario | Modifica (`editor`) | Visualizzazione (`viewer`) |
+|---|---|---|---|
+| Vedere lista e membri | ✓ | ✓ | ✓ |
+| Aggiungere/togliere anime | ✓ | ✓ | |
+| Eliminare, invitare, cambiare ruoli, rimuovere membri (e rinominare: ammesso dalle regole, manca la UI) | ✓ | | |
+| Uscire dalla lista | — | ✓ | ✓ |
+
+**Collegamento dei collaboratori.** Il client non può cercare un utente per email (serve l'Admin SDK), quindi l'invito
+è indirizzato all'email e il destinatario lo trova con `invites where toEmail == <sua email>`. L'ID `listId_email` fa sì che
+ci sia un solo invito per persona e lista, e permette alle regole di trovarlo senza che il client lo passi.
+Accettare = un batch che aggiunge se stessi a `members`/`memberIds`/`profiles` e cancella l'invito; la regola `join`
+verifica che esista l'invito a proprio nome per quella lista e che il ruolo scritto sia quello dell'invito.
+Il proprietario non può aggiungere membri a mano: si entra solo tramite invito.
+
+**Migrazione.** Le prime versioni salvavano le liste in `users/{uid}/lists`. A ogni accesso `migrateLegacyLists` le sposta
+in `lists/` con lo stesso ID e cancella le vecchie; quando non ce ne sono più, il codice si può togliere.
 
 - `genres` è copiato nel progresso (denormalizzazione voluta): il profilo dei gusti si calcola leggendo solo `progress`.
 - I campi null **non** si scrivono (le regole validano solo i campi presenti).
 - Se non resta nessuna puntata vista il documento di progresso viene **cancellato**.
 - TTL della cache: serie concluse 30 giorni, serie in corso 12 ore (escono nuove puntate). Se AniList non risponde si usa il dato scaduto.
 - `firestore.rules`: `anime/` leggibile/scrivibile da utenti autenticati con validazione di campi, tipi e ID, **mai cancellabile**;
-  `users/{uid}/**` solo dal proprietario.
+  `users/{uid}/**` solo dal proprietario; `lists/` leggibile dai membri e modificabile secondo il ruolo (tabella sopra);
+  `invites/` leggibile e cancellabile solo da mittente e destinatario, creabile solo dal proprietario della lista.
+- Le query sono costruite perché le regole le possano verificare: `lists` con `memberIds array-contains uid`, `invites` con
+  `toEmail ==` oppure `fromUid ==` + `listId ==`. Niente `orderBy` (l'ordinamento si fa nel client): eviterebbe indici compositi.
 - **Le scritture non si attendono** (`.await()` solo sulle letture). Firestore le applica subito alla cache locale; attenderle
   bloccherebbe la UI finché il server non conferma, cioè all'infinito offline. Gli errori finiscono nel log.
+  **Eccezione:** accettare un invito si attende (con timeout di 15 s), perché solo il server può dire se l'invito è ancora valido
+  e la lista non è ancora nella cache locale di chi entra.
 
 ## 6. API esterne
 
@@ -184,17 +223,29 @@ Android Studio (Koala o successivo) apre la cartella e fa tutto da solo. La CI (
 - **Primo accesso offline.** Il primo accesso richiede rete; dopo, Firebase conserva la sessione e l'app si apre anche offline.
 - **Sequel nei consigli.** Se l'utente guarda S1, la S2 (stessi generi) può comparire tra i consigliati. Soluzione prevista:
   leggere `relations` da AniList ed escludere le schede collegate a ciò che è già visto.
+- **Inviti per email esatta.** L'invito vale per l'email scritta, confrontata in minuscolo con quella dell'account Google.
+  Alias come `nome.cognome@gmail.com` / `nomecognome@gmail.com` o `+etichetta` non vengono riconosciuti: serve l'email
+  con cui la persona accede. Non c'è notifica: il destinatario vede l'invito aprendo l'app.
+- **Nomi e foto nelle liste condivise.** Sono copiati in `profiles` al momento della creazione o dell'ingresso e non si
+  aggiornano se l'utente cambia nome sull'account Google.
 - **Titoli adulti.** Esclusi con `isAdult: false` lato AniList.
 - **Pubblicazione.** `isMinifyEnabled = false` nella release: se si attiva R8 servono regole per kotlinx.serialization e Retrofit.
 
 ## 10. Stato della verifica
 
-Il codice è stato scritto senza poter compilare né eseguire l'app (nessun Android SDK né accesso a rete nell'ambiente di
-creazione). Il motore di raccomandazione ha unit test pensati per passare, ma **non sono mai stati eseguiti**, e le query
-GraphQL non sono state provate contro il server reale. Al primo import in Android Studio:
-1. Sync Gradle e `testDebugUnitTest`; correggere eventuali errori di compilazione.
-2. Provare le tre query nel playground `https://anilist.co/graphiql` se una ricerca restituisce errori.
-3. Verificare su dispositivo: crea lista, aggiungi anime, segna puntate, modalità aereo, consigliati.
+Verificato (10/11/2026):
+- `assembleDebug` compila con JDK 17; l'APK si installa e parte su dispositivo (Android 16).
+- `testDebugUnitTest` passa: motore di raccomandazione e regole di dominio delle liste condivise (`SharedListTest`).
+- Le tre query AniList rispondono senza errori contro il server reale. La ricerca di AniList confronta **parole intere**:
+  "fri" non trova nulla, "frieren" sì.
+- Accesso con Google funzionante dopo aver registrato lo SHA-1 di debug.
+
+Da verificare:
+1. Su dispositivo, con due account Google: invito, accettazione, rifiuto, sola visualizzazione, uscita, modalità aereo.
+
+Le regole di `lists/` e `invites/` sono provate nell'emulatore Firestore con `@firebase/rules-unit-testing`
+(66 casi: creazione, lettura, inviti, ingresso con ruolo giusto e sbagliato, editor, viewer, rifiuto, ritiro,
+poteri e limiti del proprietario, eliminazione, migrazione). Il test non è nel repo; se si aggiunge, va in `test/rules/`.
 
 ## 11. Convenzioni
 

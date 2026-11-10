@@ -26,9 +26,168 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Dati personali: liste e progressi visibili solo al proprietario.
+    // Dati personali: progressi (e liste del vecchio formato, da migrare) visibili solo al proprietario.
     match /users/{uid}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ---------- Liste condivise ----------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Email dell'account Google, minuscola: è la chiave degli inviti (l'app la salva già minuscola).
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    function validName(s, max) {
+      return s is string && s.size() > 0 && s.size() <= max;
+    }
+
+    function validProfile(p) {
+      return p is map
+        && p.keys().hasOnly(['name', 'photoUrl'])
+        && validName(p.name, 100)
+        && (!('photoUrl' in p) || (p.photoUrl is string && p.photoUrl.size() < 2048));
+    }
+
+    // lists/{listId}
+    //   name, ownerId, createdAt, updatedAt, animeIds[], members{uid: ruolo}, memberIds[], profiles{uid: {...}}
+    // members comanda i permessi; memberIds ne è la copia per la query array-contains e deve coincidere.
+    match /lists/{listId} {
+      function roleOf(data) {
+        return data.members.get(request.auth.uid, null);
+      }
+
+      function changedOnly(keys) {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+      }
+
+      function memberIdsConsistent() {
+        return request.resource.data.memberIds is list
+          && request.resource.data.memberIds.size() == request.resource.data.members.size()
+          && request.resource.data.memberIds.toSet() == request.resource.data.members.keys().toSet();
+      }
+
+      function memberChanges() {
+        return request.resource.data.members.diff(resource.data.members);
+      }
+
+      function onlyMyEntriesChange() {
+        return memberChanges().affectedKeys() == [request.auth.uid].toSet()
+          && request.resource.data.profiles.diff(resource.data.profiles).affectedKeys()
+               .hasOnly([request.auth.uid]);
+      }
+
+      function invitePath() {
+        return /databases/$(database)/documents/invites/$(listId + '_' + myEmail());
+      }
+
+      allow read: if signedIn() && request.auth.uid in resource.data.memberIds;
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+             'name', 'ownerId', 'createdAt', 'updatedAt', 'animeIds', 'members', 'memberIds', 'profiles'])
+        && request.resource.data.keys().hasAll([
+             'name', 'ownerId', 'createdAt', 'animeIds', 'members', 'memberIds', 'profiles'])
+        && validName(request.resource.data.name, 100)
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.createdAt is int
+        && request.resource.data.animeIds is list
+        && request.resource.data.members.keys().hasOnly([request.auth.uid])
+        && request.resource.data.members[request.auth.uid] == 'owner'
+        && memberIdsConsistent()
+        && request.resource.data.profiles.keys().hasOnly([request.auth.uid])
+        && validProfile(request.resource.data.profiles[request.auth.uid]);
+
+      // Proprietario: tutto tranne cambiare proprietario, aggiungere membri a mano (solo via invito)
+      // o promuovere qualcuno a proprietario. Un membro alla volta, come fa l'app.
+      function ownerUpdate() {
+        let ch = memberChanges();
+        return roleOf(resource.data) == 'owner'
+          && changedOnly(['name', 'updatedAt', 'animeIds', 'members', 'memberIds', 'profiles'])
+          && validName(request.resource.data.name, 100)
+          && request.resource.data.animeIds is list
+          && request.resource.data.members[request.auth.uid] == 'owner'
+          && ch.addedKeys().size() == 0
+          && ch.affectedKeys().size() <= 1
+          // Togliendo i ruoli ammessi resta un solo 'owner' (il suo): nessun altro proprietario.
+          && request.resource.data.members.values().removeAll(['editor', 'viewer']) == ['owner']
+          && memberIdsConsistent();
+      }
+
+      // Chi può modificare tocca solo gli anime della lista.
+      function editorUpdate() {
+        return roleOf(resource.data) == 'editor'
+          && changedOnly(['animeIds', 'updatedAt'])
+          && request.resource.data.animeIds is list;
+      }
+
+      // Chiunque non sia il proprietario può uscire togliendo solo se stesso.
+      function leave() {
+        return roleOf(resource.data) in ['editor', 'viewer']
+          && changedOnly(['members', 'memberIds', 'profiles', 'updatedAt'])
+          && onlyMyEntriesChange()
+          && !(request.auth.uid in request.resource.data.members)
+          && !(request.auth.uid in request.resource.data.profiles)
+          && memberIdsConsistent();
+      }
+
+      // Ingresso: solo con un invito a proprio nome per questa lista, e col ruolo dell'invito.
+      // get() in un batch vede lo stato prima del batch, quindi l'invito cancellato insieme conta ancora.
+      function join() {
+        return roleOf(resource.data) == null
+          && exists(invitePath())
+          && get(invitePath()).data.listId == listId
+          && changedOnly(['members', 'memberIds', 'profiles', 'updatedAt'])
+          && onlyMyEntriesChange()
+          && request.resource.data.members[request.auth.uid] == get(invitePath()).data.role
+          && validProfile(request.resource.data.profiles[request.auth.uid])
+          && memberIdsConsistent();
+      }
+
+      allow update: if signedIn() && (ownerUpdate() || editorUpdate() || leave() || join());
+
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // invites/{listId_email}: inviti in attesa. Li crea il proprietario della lista; li legge e li
+    // cancella (rifiuto) il destinatario, li legge e li cancella (ritiro) chi li ha mandati.
+    // Nessuno può elencare gli inviti degli altri: le query devono filtrare su toEmail o fromUid.
+    match /invites/{inviteId} {
+      function isRecipient() {
+        return resource.data.toEmail == myEmail();
+      }
+
+      function isSender() {
+        return resource.data.fromUid == request.auth.uid;
+      }
+
+      allow read: if signedIn() && (isSender() || isRecipient());
+
+      allow create, update: if signedIn()
+        && request.resource.data.keys().hasOnly([
+             'listId', 'listName', 'role', 'fromUid', 'fromName', 'toEmail', 'createdAt'])
+        && request.resource.data.keys().hasAll([
+             'listId', 'listName', 'role', 'fromUid', 'fromName', 'toEmail', 'createdAt'])
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.role in ['editor', 'viewer']
+        && request.resource.data.listId is string
+        && validName(request.resource.data.listName, 100)
+        && request.resource.data.fromName is string && request.resource.data.fromName.size() <= 100
+        && request.resource.data.createdAt is int
+        && validName(request.resource.data.toEmail, 320)
+        && request.resource.data.toEmail == request.resource.data.toEmail.lower()
+        && request.resource.data.toEmail != myEmail()
+        && inviteId == request.resource.data.listId + '_' + request.resource.data.toEmail
+        && get(/databases/$(database)/documents/lists/$(request.resource.data.listId)).data.ownerId
+             == request.auth.uid
+        // Su update (re-invito) non si può spostare l'invito su un altro mittente.
+        && (resource == null || resource.data.fromUid == request.auth.uid);
+
+      allow delete: if signedIn() && (isSender() || isRecipient());
     }
   }
 }

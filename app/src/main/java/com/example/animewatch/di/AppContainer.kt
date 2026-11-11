@@ -8,7 +8,7 @@ import com.example.animewatch.data.firebase.ListDataSource
 import com.example.animewatch.data.firebase.UserDataSource
 import com.example.animewatch.data.remote.anilist.AniListApi
 import com.example.animewatch.data.remote.anilist.AniListClient
-import com.example.animewatch.data.remote.openrouter.OpenRouterApi
+import com.example.animewatch.data.remote.ai.AiProxyApi
 import com.example.animewatch.data.update.AppUpdater
 import com.example.animewatch.data.update.GitHubApi
 import com.example.animewatch.domain.LlmReranker
@@ -45,10 +45,10 @@ class AppContainer(context: Context) {
     private val firebaseAuth = FirebaseAuth.getInstance()
 
     /**
-     * OpenRouter passando dal proxy (proxy/, Cloudflare Worker), che aggiunge la chiave: l'app si presenta con l'ID
+     * L'AI (Gemini) passando dal proxy (proxy/, Cloudflare Worker), che aggiunge la chiave: l'app si presenta con l'ID
      * token Firebase dell'utente. null se il proxy non è configurato: il riordino AI resta semplicemente spento.
      */
-    private val openRouterApi: OpenRouterApi? =
+    private val aiProxyApi: AiProxyApi? =
         BuildConfig.AI_PROXY_URL.takeIf { it.isNotBlank() }?.let { proxyUrl ->
             val client = OkHttpClient.Builder()
                 .addInterceptor { chain ->
@@ -61,14 +61,17 @@ class AppContainer(context: Context) {
                     if (token != null) request.header("Authorization", "Bearer $token")
                     chain.proceed(request.build())
                 }
-                .callTimeout(60, TimeUnit.SECONDS)
+                // Di solito risponde in pochi secondi, ma un modello lento o carico può metterci anche un minuto
+                // prima che arrivi il primo byte. Anche la lettura va allungata: quella predefinita (10 s) chiudeva prima.
+                .readTimeout(90, TimeUnit.SECONDS)
+                .callTimeout(90, TimeUnit.SECONDS)
                 .build()
             Retrofit.Builder()
                 .baseUrl(proxyUrl)
                 .client(client)
                 .addConverterFactory(json.asConverterFactory(jsonMediaType))
                 .build()
-                .create(OpenRouterApi::class.java)
+                .create(AiProxyApi::class.java)
         }
 
     // Download dell'APK: niente callTimeout (dipende dalla connessione), solo quello di lettura.
@@ -106,6 +109,6 @@ class AppContainer(context: Context) {
     val recommender = RecommendationService(
         aniList = aniListClient,
         animeRepo = animeRepo,
-        reranker = LlmReranker(openRouterApi),
+        reranker = LlmReranker(aiProxyApi),
     )
 }

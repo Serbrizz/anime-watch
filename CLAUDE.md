@@ -19,7 +19,7 @@ anime consigliati in base ai generi già guardati. Dati anime da AniList, dati u
 4. **Progresso unico.** Il progresso è per utente e per anime, **non** per lista: lo stesso anime in due liste ha lo stesso stato.
 5. **Cerca.** Ricerca per titolo (romaji/inglese) sul catalogo AniList, con debounce di 500 ms.
 6. **Consigliati.** Sezione con anime dai generi simili a quelli già guardati (algoritmo in §7), esclusi quelli già in lista o iniziati.
-   Riordino opzionale con un LLM via OpenRouter, che aggiunge un motivo in italiano per ogni consiglio.
+   Riordino opzionale con un LLM (Gemini, piano gratuito), che aggiunge un motivo in italiano per ogni consiglio.
 7. **Offline.** Liste e progressi si leggono e si modificano anche senza rete (cache locale di Firestore) e si sincronizzano dopo.
 8. **Accesso.** Solo con account Google, da una schermata di login al primo avvio; la sessione resta finché l'utente non tocca "Esci".
 9. **Liste condivise.** Il proprietario invita una persona scrivendo l'email del suo account Google e scegliendo
@@ -49,8 +49,8 @@ liste condivise (commenti, profili pubblici), tracciamento dei voti personali, t
 | Backend utente | Firebase Auth (solo Google) + Cloud Firestore + Crashlytics | BoM 33.4.0, plugin Crashlytics 3.0.2 |
 | Accesso Google | Credential Manager (`androidx.credentials`) + Google ID | 1.3.0 / 1.1.1 |
 | Dati anime | AniList GraphQL, `https://graphql.anilist.co/` | pubblico, senza chiave |
-| LLM (opzionale) | OpenRouter, raggiunto tramite il proxy | — |
-| Proxy AI | Cloudflare Worker (`proxy/`, JavaScript), custodisce la chiave OpenRouter | Wrangler 4.160.0 |
+| LLM (opzionale) | Gemini API (Google AI Studio, piano gratuito), raggiunta tramite il proxy | `gemini-flash-lite-latest` |
+| Proxy AI | Cloudflare Worker (`proxy/`, JavaScript), custodisce la chiave Gemini | Wrangler 4.160.0 |
 | Rete | Retrofit + OkHttp + kotlinx.serialization | 2.11.0 / 4.12.0 / 1.7.3 |
 | Immagini | Coil | 2.7.0 |
 | Build | Gradle 8.9, AGP 8.5.2, version catalog | JDK 17 |
@@ -71,8 +71,15 @@ Firestore fa da **cache condivisa** davanti ad AniList (§5), così si fa una so
 
 ### Perché un proxy su Cloudflare
 Una chiave dentro l'APK si estrae sempre: decompilando l'app o leggendo la richiesta. Le release sono pubbliche, quindi
-la chiave OpenRouter sta solo nel Worker, come segreto. Cloudflare e non una Cloud Function perché i Workers sono gratuiti
+la chiave Gemini sta solo nel Worker, come segreto. Cloudflare e non una Cloud Function perché i Workers sono gratuiti
 senza carta, mentre le Functions richiedono il piano Blaze di Firebase.
+
+### Perché Gemini
+Gratis senza carta e con una quota **del progetto Google**, non condivisa. Prima c'era OpenRouter: i suoi modelli a
+pagamento costano (anche se poco) e quelli `:free` hanno limiti condivisi fra tutti i suoi utenti, quasi sempre saturi
+nelle ore di punta; alcuni inoltre ragionano fino a esaurire i token e rispondono vuoto. Gemini accetta uno schema JSON
+della risposta e lo rispetta. **Mai modelli a pagamento:** la chiave è su un progetto senza fatturazione, così non può
+costare nulla. Sul piano gratuito Google può usare i prompt per addestrare i modelli: contengono solo generi e titoli.
 
 ## 3. Struttura del codice
 
@@ -91,12 +98,12 @@ app/src/main/java/com/example/animewatch/
 │  ├─ firebase/Mappers.kt      modelli <-> documenti Firestore
 │  ├─ remote/
 │  │  ├─ anilist/              AniListApi (1 endpoint POST), AniListClient (query), DTO
-│  │  └─ openrouter/           OpenRouterApi (chat/completions, tramite il proxy)
+│  │  └─ ai/                   AiProxyApi (chat/completions e preflight, tramite il proxy)
 │  └─ update/                  AppUpdater (release GitHub, download, installer), GitHubApi, AppVersion e PendingReleases (puri, testati)
 ├─ domain/
 │  ├─ RecommendationEngine     profilo generi + coseno (puro, testato)
 │  ├─ RecommendationService    candidati da AniList -> ranking -> riordino AI opzionale
-│  └─ LlmReranker              prompt a OpenRouter, parsing JSON, fallback
+│  └─ LlmReranker              prompt e schema della risposta, parsing JSON, fallback
 └─ ui/
    ├─ AnimeWatchRoot.kt        login se non c'è utente, altrimenti NavHost + bottom bar + banner errori
    ├─ AppViewModel.kt          utente, liste, inviti, progressi, cache schede, azioni
@@ -107,7 +114,8 @@ app/src/main/java/com/example/animewatch/
    └─ theme/Theme.kt
 
 proxy/                          Cloudflare Worker "animewatch-ai" (fuori dall'app, deploy con wrangler)
-├─ src/index.js                 POST /chat/completions: token Firebase, limite per utente, modello fisso, inoltro a OpenRouter
+├─ src/index.js                 POST /chat/completions: token Firebase, limite per utente, modello fisso, traduzione per Gemini;
+│                               GET /status: preflight su chiave e modello
 ├─ src/firebase-auth.js         verifica degli ID token Firebase (firma RS256 con le chiavi di Google, aud/iss/exp/sub)
 ├─ test/                        node --test sulla verifica del token
 └─ wrangler.toml                nome, variabili (progetto Firebase, modello, max token), limite di richieste
@@ -131,7 +139,7 @@ importare nulla di Android (resta testabile sulla JVM).
 | `profile/invites` | Inviti ricevuti: lista, chi invita, ruolo; "Accetta" / "Rifiuta" |
 | `anime/{animeId}` | Copertina, generi, trama, "Aggiungi a una lista" (aggiunge la serie), sotto il menu a tendina "Stagione" (se più d'una: etichetta, titolo, spunta sulle viste), griglia di chip per puntata, "Segna tutte"/"Azzera" |
 | `search` | Campo di ricerca, risultati con "+" per aggiungere a una lista |
-| `recs` | Generi dominanti, interruttore "Affina con AI" (solo se la chiave c'è), elenco con affinità % e motivo |
+| `recs` | Generi dominanti, interruttore "Affina con AI" (solo se il proxy è configurato; disattivato con "Non disponibile al momento" se il preflight dice no), elenco con affinità % e motivo |
 
 Titoli degli anime ovunque in inglese, se AniList lo conosce, altrimenti in romaji (`Anime.englishOrRomaji`); nella
 scheda il romaji compare sotto come sottotitolo. La ricerca resta su entrambi.
@@ -213,16 +221,32 @@ stagioni (Dr. Stone: Stone Wars -> speciale "Ryusui" -> New World), e restano le
 hanno ancora un formato. AniList non
 mette sempre la relazione inversa, quindi il raggruppamento la tratta come non orientata.
 
-**OpenRouter, tramite il proxy** — l'app fa `POST <aiProxyUrl>chat/completions` con header
-`Authorization: Bearer <ID token Firebase dell'utente>` e corpo `{messages, temperature}`. Il Worker:
+**Gemini, tramite il proxy** — l'app parla il formato chat/completions di OpenAI: `POST <aiProxyUrl>chat/completions`
+con header `Authorization: Bearer <ID token Firebase dell'utente>` e corpo `{messages, temperature, response_format}`,
+dove `response_format` è `{type: "json_schema", json_schema: {name, schema}}`. Il Worker:
 1. verifica il token (progetto `FIREBASE_PROJECT_ID`) e risponde 401 se non è valido;
 2. applica il limite di 10 richieste al minuto per uid (429);
 3. accetta al massimo 10 messaggi e 64 KB;
-4. fissa `model` (`OPENROUTER_MODEL`, oggi `openai/gpt-4o-mini`: gli ID cambiano nel tempo, verificarli su
-   openrouter.ai/models) e `max_tokens`;
-5. aggiunge la chiave (segreto `OPENROUTER_API_KEY`) e restituisce la risposta di OpenRouter così com'è.
-Il modello riceve una **lista chiusa** di 30 candidati reali e deve restituire un array JSON `[{id, reason}]`:
-non può inventare titoli. Ogni anomalia (rete, JSON non valido, ID sconosciuti) => `null` => si usa l'algoritmo.
+4. traduce per `generateContent` di Gemini: messaggi `system` in `systemInstruction`, modalità JSON, lo schema in
+   `responseJsonSchema` (il modello è obbligato a rispettarlo: col solo prompt un id è arrivato come
+   `"21827 | Mob Psycho 100"`), ragionamento al minimo (`GEMINI_THINKING`, oggi `low`), `maxOutputTokens`;
+5. fissa i modelli (`GEMINI_MODELS`, in ordine di preferenza; oggi l'alias `gemini-flash-lite-latest`, che segue l'ultima
+   versione perché Google ritira i modelli e un ID fisso smetterebbe di funzionare, poi `gemini-3.1-flash-lite`): se uno
+   risponde 429 (quota gratuita, che è per modello), 500 o 503 (sovraccarico, capita) prova il successivo.
+   `gemini-2.5-*` non esiste già più per le chiavi nuove; `gemini-flash-latest` impiegava un minuto.
+   Aggiunge la chiave (segreto `GEMINI_API_KEY`);
+6. restituisce la risposta nel formato OpenAI (`choices[0].message.content`) e registra modello, motivo di arresto e
+   token; gli errori di Gemini tornano con lo stesso codice (429 = quota gratuita finita) e il messaggio.
+Il modello riceve una **lista chiusa** di 30 candidati reali (id, titolo, generi, voto medio), i generi dominanti e fino a
+15 anime visti dai più recenti con quanto se ne è visto ("tutto", "12/24"), e restituisce per ognuno affinità 0-100 e
+motivo: `[{id, affinity, reason}]` (§7.5). Non può inventare titoli. Ogni anomalia (rete, JSON non valido, ID sconosciuti) => `null` => si usa l'algoritmo.
+Risponde in 2-4 secondi; l'app aspetta comunque fino a 90 s (lettura e chiamata).
+
+**Preflight** — `GET <aiProxyUrl>status`, stesso token e stesso limite per uid, risponde `{available}`: il Worker legge i
+metadati del primo modello (`GET models/<modello>`, non consuma quota), quindi verifica chiave e modello. La quota
+residua Gemini non la espone. L'app lo chiama all'apertura di Consigliati (se l'AI non risulta già disponibile) e su "Aggiorna"
+(il ricalcolo ne attende l'esito); con `false`, se il preflight fallisce o se un riordino fallisce dopo un preflight riuscito (es. quota finita),
+l'interruttore AI si disattiva con la scritta rossa "Non disponibile al momento".
 
 **GitHub** — `GET https://api.github.com/repos/<appReleaseRepo>/releases?per_page=30`, senza token (limite 60 richieste/ora
 per IP; l'app ne fa una ogni 6 ore): funziona solo se il repository è **pubblico**. Con un repository privato risponde
@@ -244,9 +268,14 @@ dell'allegato dell'ultima.
 4. **Una serie, una volta.** Senza richieste in più: i candidati collegati come prequel/sequel, anche attraverso l'ID di
    una stagione che non è fra i candidati, diventano un consiglio solo, al posto e col punteggio del migliore, mostrato
    con la stagione uscita prima. Non si ricostruiscono i franchise dei candidati: costerebbe troppe richieste in serie.
-5. **Riordino AI (opzionale).** Le prime 30 serie vanno a OpenRouter, che ne sceglie 12 con motivazione; senza proxy configurato o in errore si mostrano le prime 20 dell'algoritmo.
-6. **Quando si ricalcola.** All'apertura, al tocco su "Aggiorna", e solo se cambiano i 3 generi dominanti o l'interruttore AI
-   (non a ogni puntata segnata: ogni calcolo costa richieste ad AniList).
+5. **Riordino AI (opzionale).** Le prime 30 serie vanno a Gemini, che assegna a ognuna la **sua** affinità (0-100) con un
+   motivo, usando ciò che sa di tono, temi e stile confrontato con gli anime visti. Si mostrano le 12 con l'affinità più
+   alta, e l'affinità mostrata è la sua. Non vede l'affinità dell'algoritmo: quando la vedeva la ricopiava (±2 punti) e
+   l'ordine non cambiava. Senza proxy configurato o in errore si mostrano le prime 20 dell'algoritmo.
+6. **Quando si ricalcola.** I consigli (dell'algoritmo e dell'AI, separatamente) restano in memoria in
+   `RecommendationService` finché l'utente non **inizia un anime nuovo**: riaprire la schermata, segnare altre puntate di
+   anime già iniziati o accendere e spegnere l'AI non costano richieste. "Aggiorna" forza il ricalcolo. Gli anime aggiunti a
+   una lista nel frattempo li toglie la schermata. Al riavvio dell'app si ricalcola.
 
 ## 8. Configurazione
 
@@ -285,11 +314,13 @@ npm install                                  # una volta: wrangler alla versione
 npm test                                     # test della verifica del token
 npx wrangler login                           # una volta per PC (apre il browser)
 npm run deploy                               # pubblica; stampa l'URL da mettere in aiProxyUrl
-npx wrangler secret put OPENROUTER_API_KEY   # la chiave, solo la prima volta o quando cambia
-npm run logs                                 # log in tempo reale (401, 429, errori di OpenRouter)
+npx wrangler secret put GEMINI_API_KEY       # la chiave, solo la prima volta o quando cambia
+npm run logs                                 # log in tempo reale (401, 429, errori e risposte di Gemini)
 ```
-Modello, `max_tokens` e limite di richieste stanno in `proxy/wrangler.toml`. Cambiarli non richiede una nuova
-versione dell'app, basta un deploy.
+La chiave si crea su aistudio.google.com/apikey, su un progetto Google Cloud **senza fatturazione** (piano gratuito: non
+può costare nulla). Modello, ragionamento, `max_tokens` e limite di richieste stanno in `proxy/wrangler.toml`.
+Cambiarli non richiede una nuova versione dell'app, basta un deploy. I modelli disponibili per la chiave:
+`GET https://generativelanguage.googleapis.com/v1beta/models` con header `x-goog-api-key`.
 
 ### Build e test
 ```
@@ -304,9 +335,11 @@ Android Studio (Koala o successivo) apre la cartella e fa tutto da solo. La CI (
 
 ## 9. Sicurezza e limiti noti
 
-- **Proxy AI.** La chiave OpenRouter non è nell'APK. L'URL del Worker è pubblico, ma risponde solo a chi ha un ID token
+- **Proxy AI.** La chiave Gemini non è nell'APK. L'URL del Worker è pubblico, ma risponde solo a chi ha un ID token
   del progetto Firebase. Chiunque abbia un account Google può però accedere all'app e quindi usare il proxy, entro
-  10 richieste al minuto. Il tetto vero alla spesa resta il **limite di credito sulla chiave** in OpenRouter.
+  10 richieste al minuto. La chiave è sul piano gratuito, senza fatturazione: non si paga nulla. La quota giornaliera
+  è condivisa da tutti gli utenti dell'app; finita, l'interruttore AI risulta "Non disponibile al momento" fino al
+  giorno dopo. Google cambia ogni tanto quote e modelli gratuiti.
 - **Aggiornamenti.** Il repository delle release deve essere pubblico (§6). L'APK scaricato è verificato con dimensione e
   sha256 di GitHub; Android stesso rifiuta un APK con firma diversa o `versionCode` non maggiore.
 - **Cache `anime/` scrivibile dai client.** Le regole limitano forma e tipi ma un utente malevolo potrebbe scrivere dati falsi
@@ -341,14 +374,15 @@ Verificato (11/11/2026):
 - `assembleRelease` firma con il keystore condiviso (SHA-1 controllato con apksigner); `versionCode`/`versionName` arrivano da `appVersion`.
 - `verifySigningKey` ferma la build con un keystore diverso o senza `keystore.properties`.
 - Proxy pubblicato: risponde 401 senza token o con token falsi o firmati da chiavi sconosciute, 405 ai GET e 404 agli
-  altri percorsi. `npm test` copre la verifica del token (firma, aud, iss, scadenza, uid). L'APK non contiene `sk-or-`.
+  altri percorsi. `npm test` copre la verifica del token (firma, aud, iss, scadenza, uid).
+- "Affina con AI" su dispositivo (debug) con Gemini: preflight, riordino con schema e motivi in italiano; con il proxy
+  che risponde `false` l'interruttore è disattivato con "Non disponibile al momento".
 
 Da verificare:
 1. Su dispositivo, con due account Google: invito, accettazione, rifiuto, sola visualizzazione, uscita, modalità aereo.
 2. Aggiornamento completo (popup, download, permesso "installa app sconosciute", installazione): possibile solo con il
    repository pubblico e almeno due release.
-3. "Affina con AI" su dispositivo, con un utente vero che passa dal proxy fino a OpenRouter.
-4. Franchise su dispositivo, dopo aver pubblicato le regole con i campi nuovi di `anime/` (senza, la scrittura in cache
+3. Franchise su dispositivo, dopo aver pubblicato le regole con i campi nuovi di `anime/` (senza, la scrittura in cache
    fallisce e ogni apertura rilegge da AniList): selettore di stagione, lista con S1 e S2 già presenti, aggiunta della S2
    di una serie già in lista, rimozione, offline.
 

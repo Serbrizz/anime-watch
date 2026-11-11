@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
@@ -32,12 +33,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.animewatch.data.model.Anime
+import com.example.animewatch.domain.LlmReranker
 import com.example.animewatch.domain.RecommendationEngine
 import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.AddToListDialog
 import com.example.animewatch.ui.components.AnimeRow
 import com.example.animewatch.ui.components.EmptyState
 import com.example.animewatch.ui.components.ScreenBar
+import com.example.animewatch.ui.recs.RecommendationsViewModel.AiStatus
 import kotlin.math.roundToInt
 
 @Composable
@@ -51,6 +54,7 @@ fun RecommendationsScreen(
     val animeMap by appVm.anime.collectAsStateWithLifecycle()
     val franchises by appVm.franchises.collectAsStateWithLifecycle()
     val state by vm.state.collectAsStateWithLifecycle()
+    val aiStatus by vm.aiStatus.collectAsStateWithLifecycle()
     var useLlm by rememberSaveable { mutableStateOf(false) }
     var addTarget by remember { mutableStateOf<Anime?>(null) }
 
@@ -60,19 +64,22 @@ fun RecommendationsScreen(
     val known = remember(progress, lists) { progress.keys + lists.flatMap { it.animeIds } }
     val excluded = remember(known, franchises) { known + known.flatMap { franchises[it]?.seasonIds.orEmpty() } }
 
-    fun reload() {
+    fun reload(force: Boolean = false) {
         if (topGenres.isEmpty()) return
-        val titles = progress.keys.mapNotNull { animeMap[it]?.englishOrRomaji }.take(10)
-        vm.load(progress.values, titles, excluded, useLlm)
+        val titles = LlmReranker.describeWatched(progress.values) { animeMap[it]?.englishOrRomaji }
+        vm.load(progress.values, titles, excluded, useLlm, force)
     }
 
+    // Preflight a ogni apertura: il credito dell'AI può finire o tornare (si azzera ogni giorno).
+    LaunchedEffect(Unit) { vm.checkAiIfNeeded() }
     LaunchedEffect(known) { appVm.ensureFranchises(known) }
-    // Si ricalcola solo se cambiano i generi dominanti (o l'interruttore AI), non a ogni puntata:
-    // ogni calcolo costa richieste ad AniList.
-    LaunchedEffect(topGenres, useLlm) { reload() }
+    // Il servizio tiene i consigli finché non si inizia un anime nuovo: riaprire la schermata o segnare altre puntate
+    // non costa richieste. "Aggiorna" forza il ricalcolo.
+    val started = remember(progress) { progress.filterValues { it.watchedEpisodes.isNotEmpty() }.keys }
+    LaunchedEffect(started, useLlm) { reload() }
 
     ScreenBar("Consigliati") {
-        IconButton(onClick = { reload() }, enabled = topGenres.isNotEmpty()) {
+        IconButton(onClick = { vm.checkAi(); reload(force = true) }, enabled = topGenres.isNotEmpty()) {
             Icon(Icons.Default.Refresh, contentDescription = "Aggiorna")
         }
     }
@@ -91,22 +98,35 @@ fun RecommendationsScreen(
                 )
                 if (vm.llmAvailable) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "Affina con AI (OpenRouter)",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f),
+                        Column(Modifier.weight(1f)) {
+                            Text("Affina con AI", style = MaterialTheme.typography.bodyMedium)
+                            if (aiStatus == AiStatus.UNAVAILABLE) {
+                                Text(
+                                    "Non disponibile al momento",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = useLlm && aiStatus == AiStatus.AVAILABLE,
+                            onCheckedChange = { useLlm = it },
+                            enabled = aiStatus == AiStatus.AVAILABLE,
                         )
-                        Switch(checked = useLlm, onCheckedChange = { useLlm = it })
                     }
                 }
             }
 
             val visible = state.items.filter { it.anime.id !in excluded }
+            // Le righe hanno una chiave, quindi cambiando elenco (AI accesa o spenta) la lista resterebbe sulla riga che
+            // era in cima, nascondendo il nuovo primo consiglio: si torna all'inizio.
+            val listState = rememberLazyListState()
+            LaunchedEffect(state.items) { listState.scrollToItem(0) }
             when {
                 state.loading -> CircularProgressIndicator(Modifier.padding(24.dp))
                 state.error != null -> EmptyState(state.error.orEmpty())
                 visible.isEmpty() -> EmptyState("Nessun consiglio al momento.")
-                else -> LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp)) {
+                else -> LazyColumn(state = listState, contentPadding = PaddingValues(horizontal = 16.dp)) {
                     items(visible, key = { it.anime.id }) { rec ->
                         AnimeRow(
                             anime = rec.anime,

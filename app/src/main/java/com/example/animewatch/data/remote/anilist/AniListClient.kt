@@ -11,8 +11,16 @@ import java.io.IOException
 /** Livello sottile sopra AniListApi: costruisce le query e converte i DTO in [Anime]. */
 class AniListClient(private val api: AniListApi) {
 
+    /**
+     * I 25 titoli più pertinenti, dal più popolare. Non si chiede `sort: POPULARITY_DESC` ad AniList: fra i
+     * titoli che corrispondono metterebbe davanti anche quelli trovati per un sinonimo ("another" dà Re:Zero
+     * e altri isekai prima di Another) e i titoli giusti ma poco noti uscirebbero dalla pagina.
+     * L'ordinamento è stabile: a parità di popolarità resta quello per pertinenza.
+     */
     suspend fun search(text: String): List<Anime> =
-        run(SEARCH, buildJsonObject { put("search", text) })
+        fetch(SEARCH, buildJsonObject { put("search", text) })
+            .sortedByDescending { it.popularity ?: 0 }
+            .map { it.toAnime() }
 
     /** AniList accetta al massimo 50 risultati per pagina: chiamare con chunk <= 50. */
     suspend fun byIds(ids: List<Int>): List<Anime> =
@@ -25,10 +33,13 @@ class AniListClient(private val api: AniListApi) {
             put("perPage", perPage)
         })
 
-    private suspend fun run(query: String, variables: JsonObject): List<Anime> {
+    private suspend fun run(query: String, variables: JsonObject): List<Anime> =
+        fetch(query, variables).map { it.toAnime() }
+
+    private suspend fun fetch(query: String, variables: JsonObject): List<MediaDto> {
         val response = api.execute(GraphQlRequest(query, variables))
         response.errors?.firstOrNull()?.let { throw IOException("AniList: ${it.message}") }
-        return response.data?.page?.media.orEmpty().map { it.toAnime() }
+        return response.data?.page?.media.orEmpty()
     }
 
     private companion object {
@@ -41,7 +52,7 @@ class AniListClient(private val api: AniListApi) {
 
         val SEARCH =
             "query (\$search: String) { Page(page: 1, perPage: 25) { " +
-                "media(search: \$search, type: ANIME, isAdult: false, sort: SEARCH_MATCH) { $MEDIA_FIELDS } } }"
+                "media(search: \$search, type: ANIME, isAdult: false, sort: SEARCH_MATCH) { $MEDIA_FIELDS popularity } } }"
 
         val BY_IDS =
             "query (\$ids: [Int]) { Page(page: 1, perPage: 50) { " +

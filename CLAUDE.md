@@ -19,7 +19,9 @@ anime consigliati in base ai generi già guardati. Dati anime da AniList, dati u
    Pulsante "Segna tutte come viste" per chiudere la stagione in un tocco; "Azzera" per annullare.
    Per le serie in corso le puntate disponibili sono quelle già uscite (`nextAiringEpisode - 1`).
 4. **Progresso unico.** Il progresso è per utente e per anime, **non** per lista: lo stesso anime in due liste ha lo stesso stato.
-5. **Cerca.** Ricerca per titolo (romaji/inglese) sul catalogo AniList, con debounce di 500 ms.
+5. **Cerca.** Ricerca per titolo (romaji/inglese) sul catalogo AniList, con debounce di 500 ms, risultati dal più famoso.
+   Le stagioni di una stessa serie trovate insieme diventano una riga sola, con la stagione più famosa. Se un testo di più
+   parole non trova nulla si riprova una volta senza l'ultima (AniList confronta parole intere) e lo si dice sopra i risultati.
 6. **Consigliati.** Sezione con anime dai generi simili a quelli già guardati (algoritmo in §7), esclusi quelli già in lista o iniziati.
    Riordino opzionale con un LLM (Gemini, piano gratuito), che aggiunge un motivo in italiano per ogni consiglio.
 7. **Offline.** Liste e progressi si leggono e si modificano anche senza rete (cache locale di Firestore) e si sincronizzano dopo.
@@ -92,7 +94,7 @@ app/src/main/java/com/example/animewatch/
 ├─ di/AppContainer.kt          costruisce Retrofit, Firestore, repository, servizi
 ├─ data/
 │  ├─ model/Models.kt          Anime, WatchProgress, AnimeList, ListRole, ListInvite, UserProfile (+ regole di dominio)
-│  ├─ model/Franchise.kt       stagioni di una serie: raggruppamento, ordine, etichette, stagione corrente (puro, testato)
+│  ├─ model/Franchise.kt       stagioni di una serie: raggruppamento (anche di risultati e consigli), ordine, etichette, stagione corrente (puro, testato)
 │  ├─ AnimeRepository.kt       memoria -> Firestore `anime/` -> AniList; catena prequel/sequel a ondate
 │  ├─ firebase/AuthDataSource  accesso con Google (Credential Manager -> Firebase), uscita, profilo utente
 │  ├─ firebase/ListDataSource  liste (anche condivise), membri, inviti, migrazione dal vecchio formato
@@ -142,7 +144,7 @@ importare nulla di Android (resta testabile sulla JVM).
 | `list/{listId}/search` | La ricerca di `search` legata alla lista (titolo "Aggiungi a …", tastiera aperta all'arrivo): il "+" aggiunge la serie alla lista e diventa una spunta che la toglie. Se la lista sparisce o non è più modificabile torna la ricerca normale |
 | `profile/invites` | Inviti ricevuti: lista, chi invita, ruolo; "Accetta" / "Rifiuta" |
 | `anime/{animeId}` | Copertina, generi, trama, "Aggiungi a una lista" (aggiunge la serie), sotto il menu a tendina "Stagione" (se più d'una: etichetta, titolo, spunta sulle viste), griglia di chip per puntata, "Segna tutte"/"Azzera" |
-| `search` | Campo di ricerca, risultati con "+" per aggiungere a una lista |
+| `search` | Campo di ricerca, una riga per serie dalla più popolare (la sua stagione più popolare fra i risultati) con "+" per aggiungere a una lista; sopra, l'avviso se si è cercato senza l'ultima parola |
 | — (pannello "Aggiungi a una lista") | Dal "+" di Cerca e Consigliati e dal pulsante della scheda: copertina e titolo, una scheda per lista modificabile da accendere/spegnere (vale per la serie), "Nuova lista con questo anime", "Fatto" |
 | `recs` | Generi dominanti, interruttore "Affina con AI" (solo se il proxy è configurato; disattivato con "Non disponibile al momento" se il preflight dice no), elenco con affinità % e motivo |
 
@@ -218,7 +220,8 @@ in `lists/` con lo stesso ID e cancella le vecchie; quando non ce ne sono più, 
 ## 6. API esterne
 
 **AniList** — un solo endpoint, `POST /` con `{query, variables}`. Tre query in `AniListClient`:
-`search` (`media(search:…, sort: SEARCH_MATCH)`), `byIds` (`id_in`, max 50), `popularByGenre` (`genre:…`, `POPULARITY_DESC`, formati TV/MOVIE/OVA/ONA).
+`search` (`media(search:…, sort: SEARCH_MATCH)`, i 25 più pertinenti riordinati nel client per `popularity`: con
+`POPULARITY_DESC` lato AniList i titoli trovati per sinonimo scavalcano quelli giusti), `byIds` (`id_in`, max 50), `popularByGenre` (`genre:…`, `POPULARITY_DESC`, formati TV/MOVIE/OVA/ONA).
 Sempre `isAdult: false` dove si cerca. Limite ~90 richieste/minuto: le chiamate sono ridotte da cache e debounce.
 Ogni query chiede anche `format` e `relations` (`relationType(version: 2)`): si tengono solo `PREQUEL`/`SEQUEL` verso
 anime di qualsiasi formato tranne i video musicali. Gli speciali restano perché a volte sono l'unico anello fra due
@@ -355,6 +358,13 @@ Android Studio (Koala o successivo) apre la cartella e fa tutto da solo. La CI (
 - **Stagioni nei consigli.** Due stagioni della stessa serie compaiono entrambe solo se fra loro mancano, fra i candidati,
   almeno due stagioni consecutive; in quel caso si mostra la prima uscita fra i candidati, che può non essere la S1.
   Se AniList non risponde mentre si ricostruiscono le serie dell'utente, un loro seguito può passare.
+- **Stagioni nella ricerca.** Stesso raggruppamento senza richieste in più (`Franchise.collapse`), aiutato dai franchise già
+  ricostruiti per le liste: le serie dell'utente si uniscono sempre, le altre solo se fra i risultati non mancano due
+  stagioni consecutive. La riga mostra la stagione più famosa, non la prima uscita: su AniList Code Geass Re;surrection
+  è il seguito dei tre film riassuntivi, e mostrando il primo film il titolo cercato non si vedeva. Cercando "… season 2"
+  la riga mostra di solito la S1; il selettore della scheda porta alla S2.
+- **Ricerca per parole intere.** AniList non trova "resurrection" in "Re;surrection" né le parole a metà: il secondo
+  tentativo senza l'ultima parola copre i casi in cui la parola diversa è l'ultima, non gli altri.
 - **Confini del franchise.** Dipendono dalle relazioni di AniList: uno spin-off (`SPIN_OFF`, `SIDE_STORY`) resta una serie a
   sé. Uno speciale-riassunto collegato come sequel compare fra le stagioni ("Speciale"). L'ordine delle stagioni è per
   anno e stagione d'uscita.

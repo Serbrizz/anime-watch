@@ -44,6 +44,33 @@ data class Franchise(
         }
 
         /**
+         * Raggruppa per serie un elenco di risultati (ricerca, consigli) senza richieste di rete: due elementi
+         * sono la stessa serie se sono collegati come prequel/sequel, anche passando da una stagione che non è
+         * nell'elenco (S1 e S3 si ritrovano attraverso l'ID della S2, che entrambi citano), oppure se stanno
+         * nello stesso franchise già risolto in [known]. Sfugge solo un buco di due stagioni consecutive assenti.
+         * I gruppi seguono l'ordine del loro primo elemento e ognuno mantiene l'ordine di [items].
+         */
+        fun <T> collapse(
+            items: List<T>,
+            known: Map<Int, Franchise> = emptyMap(),
+            animeOf: (T) -> Anime,
+        ): List<List<T>> {
+            val parent = HashMap<Int, Int>()
+            fun find(id: Int): Int {
+                var root = parent.getOrPut(id) { id }
+                while (root != parent.getValue(root)) root = parent.getValue(root)
+                parent[id] = root
+                return root
+            }
+            for (item in items) {
+                val anime = animeOf(item)
+                for (other in anime.relatedIds) parent[find(anime.id)] = find(other)
+                known[anime.id]?.let { parent[find(anime.id)] = find(it.rootId) }
+            }
+            return items.groupBy { find(animeOf(it).id) }.values.toList()
+        }
+
+        /**
          * Gli anime di una lista, uno per franchise, nell'ordine della lista. Le liste salvate prima dei
          * franchise possono contenere più stagioni della stessa serie: qui diventano una riga sola.
          * Gli ID non ancora risolti restano a sé.

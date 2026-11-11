@@ -53,6 +53,7 @@ fun SearchScreen(
     targetListId: String? = null,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val series by vm.series.collectAsStateWithLifecycle()
     val lists by appVm.lists.collectAsStateWithLifecycle()
     val me by appVm.user.collectAsStateWithLifecycle()
     val franchises by appVm.franchises.collectAsStateWithLifecycle()
@@ -101,7 +102,17 @@ fun SearchScreen(
                     }
                 )
                 else -> LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp)) {
-                    items(state.results, key = { it.id }) { anime ->
+                    state.fallbackQuery?.let { shorter ->
+                        item(key = "fallback") {
+                            Text(
+                                "Nessun titolo con tutte le parole: risultati per \"$shorter\".",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 4.dp),
+                            )
+                        }
+                    }
+                    items(series, key = { it.id }) { anime ->
                         AnimeRow(
                             anime = anime,
                             onClick = { onOpenAnime(anime.id) },

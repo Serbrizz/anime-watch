@@ -223,7 +223,7 @@ private fun MainContent(container: AppContainer, appVm: AppViewModel, updateVm: 
                     composable(Routes.UPDATES) { UpdatesScreen(updateVm) }
                     composable(Routes.SEARCH) {
                         val searchVm: SearchViewModel = viewModel(factory = viewModelFactory {
-                            initializer { SearchViewModel(container.animeRepo) }
+                            initializer { SearchViewModel(container.animeRepo, appVm.franchises) }
                         })
                         SearchScreen(appVm, searchVm, onOpenAnime = { nav.navigate(Routes.anime(it)) })
                     }
@@ -246,7 +246,7 @@ private fun MainContent(container: AppContainer, appVm: AppViewModel, updateVm: 
                     composable(Routes.LIST_SEARCH) { entry ->
                         // Un SearchViewModel per questa voce del back stack: la ricerca della scheda Cerca resta com'era.
                         val searchVm: SearchViewModel = viewModel(factory = viewModelFactory {
-                            initializer { SearchViewModel(container.animeRepo) }
+                            initializer { SearchViewModel(container.animeRepo, appVm.franchises) }
                         })
                         SearchScreen(
                             appVm,

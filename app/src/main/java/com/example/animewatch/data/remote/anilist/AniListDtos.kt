@@ -34,6 +34,8 @@ data class MediaDto(
     val nextAiringEpisode: NextEpisodeDto? = null,
     val format: String? = null,
     val relations: RelationsDto? = null,
+    /** Utenti che lo hanno in lista su AniList. Solo per ordinare la ricerca: non entra in [Anime]. */
+    val popularity: Int? = null,
 )
 
 @Serializable

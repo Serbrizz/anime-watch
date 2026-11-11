@@ -38,6 +38,22 @@ class FranchiseTest {
     }
 
     @Test
+    fun `collapse unisce le stagioni anche attraverso una scheda assente e mantiene l'ordine`() {
+        // Senza il film: S1 lo cita come sequel e S2 come prequel, quindi si ritrovano lo stesso.
+        val groups = Franchise.collapse(listOf(s2, other, s1, s3)) { it }
+        assertEquals(listOf(listOf(s2, s1, s3), listOf(other)), groups)
+    }
+
+    @Test
+    fun `collapse usa i franchise gia risolti per le stagioni non collegate fra i risultati`() {
+        // S1 e S3 da sole non si toccano (manca la S2, che solo S3 cita), ma il franchise noto le unisce.
+        val results = listOf(s3, s1)
+        assertEquals(2, Franchise.collapse(results) { it }.size)
+        val known = Franchise.group(all)
+        assertEquals(listOf(listOf(s3, s1)), Franchise.collapse(results, known) { it })
+    }
+
+    @Test
     fun `una lista con piu stagioni della stessa serie mostra una riga sola`() {
         val known = Franchise.group(all)
         val rows = Franchise.groupList(listOf(30, 99, 10, 77), known)

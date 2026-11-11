@@ -24,6 +24,7 @@ fun Anime.toMap(): Map<String, Any> = buildMap {
     put("title", title)
     put("genres", genres)
     put("cachedAt", cachedAt)
+    put("v", ANIME_CACHE_VERSION)
     put("prequelIds", prequelIds)
     put("sequelIds", sequelIds)
     format?.let { put("format", it) }
@@ -58,10 +59,17 @@ fun DocumentSnapshot.toAnime(): Anime? {
         format = getString("format"),
         prequelIds = intList("prequelIds"),
         sequelIds = intList("sequelIds"),
-        // Le schede salvate prima delle relazioni non sanno nulla delle altre stagioni: scadute subito.
-        cachedAt = if (contains("sequelIds")) getLong("cachedAt") ?: 0L else 0L,
+        // Scritte da una versione dell'app che leggeva AniList in modo diverso: scadute subito, si rileggono.
+        cachedAt = if ((getLong("v") ?: 0L) >= ANIME_CACHE_VERSION) getLong("cachedAt") ?: 0L else 0L,
     )
 }
+
+/**
+ * Versione del formato delle schede in `anime/`: si incrementa quando cambia ciò che si ricava da AniList
+ * (campi nuovi, filtri sulle relazioni), così le schede già in cache vengono rilette invece di restare
+ * sbagliate fino alla scadenza. 1 = relazioni che includono speciali e schede senza formato.
+ */
+private const val ANIME_CACHE_VERSION = 1L
 
 fun DocumentSnapshot.toAnimeList(): AnimeList? {
     if (!exists()) return null

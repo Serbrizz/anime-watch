@@ -138,7 +138,8 @@ spostarle in `strings.xml`).
 anime/{anilistId}                    CACHE CONDIVISA fra tutti gli utenti
   id, title, titleEnglish?, coverUrl?, genres[], episodes?, airedEpisodes?,
   status?, season?, seasonYear?, averageScore?, description?, format?,
-  prequelIds[], sequelIds[]          (solo verso TV, TV_SHORT, ONA, OVA, MOVIE), cachedAt (ms)
+  prequelIds[], sequelIds[]          (anime collegati, esclusi i video musicali), cachedAt (ms),
+  v                                  versione del formato (ANIME_CACHE_VERSION in Mappers.kt)
 
 lists/{listId}                       una lista, personale o condivisa
   name, ownerId, createdAt (ms), updatedAt (ms), animeIds[]   (ID della prima stagione di ogni serie; arrayUnion/arrayRemove)
@@ -176,7 +177,8 @@ in `lists/` con lo stesso ID e cancella le vecchie; quando non ce ne sono più, 
 - I campi null **non** si scrivono (le regole validano solo i campi presenti).
 - Se non resta nessuna puntata vista il documento di progresso viene **cancellato**.
 - TTL della cache: serie concluse 30 giorni (7 se senza seguito, per scoprire una nuova stagione annunciata), serie in corso
-  12 ore (escono nuove puntate). Le schede salvate senza `sequelIds` (prima dei franchise) valgono come scadute.
+  12 ore (escono nuove puntate). Le schede con `v` mancante o minore di `ANIME_CACHE_VERSION` valgono come scadute:
+  si incrementa quando cambia ciò che si ricava da AniList, altrimenti le schede vecchie restano fino alla scadenza.
   Se AniList non risponde si usa il dato scaduto.
 - **Franchise.** Non si salvano: si ricostruiscono nel client seguendo `prequelIds`/`sequelIds` (`getWithRelated`, una
   `getMany` per livello della catena, al massimo 30 livelli e 300 schede). La lista salva la stagione uscita per prima;
@@ -199,7 +201,9 @@ in `lists/` con lo stesso ID e cancella le vecchie; quando non ce ne sono più, 
 `search` (`media(search:…, sort: SEARCH_MATCH)`), `byIds` (`id_in`, max 50), `popularByGenre` (`genre:…`, `POPULARITY_DESC`, formati TV/MOVIE/OVA/ONA).
 Sempre `isAdult: false` dove si cerca. Limite ~90 richieste/minuto: le chiamate sono ridotte da cache e debounce.
 Ogni query chiede anche `format` e `relations` (`relationType(version: 2)`): si tengono solo `PREQUEL`/`SEQUEL` verso
-anime TV, TV_SHORT, ONA, OVA o MOVIE. Speciali e video musicali restano fuori (spesso riassunti o extra). AniList non
+anime di qualsiasi formato tranne i video musicali. Gli speciali restano perché a volte sono l'unico anello fra due
+stagioni (Dr. Stone: Stone Wars -> speciale "Ryusui" -> New World), e restano le schede annunciate, che su AniList non
+hanno ancora un formato. AniList non
 mette sempre la relazione inversa, quindi il raggruppamento la tratta come non orientata.
 
 **OpenRouter, tramite il proxy** — l'app fa `POST <aiProxyUrl>chat/completions` con header
@@ -305,7 +309,8 @@ Android Studio (Koala o successivo) apre la cartella e fa tutto da solo. La CI (
   almeno due stagioni consecutive; in quel caso si mostra la prima uscita fra i candidati, che può non essere la S1.
   Se AniList non risponde mentre si ricostruiscono le serie dell'utente, un loro seguito può passare.
 - **Confini del franchise.** Dipendono dalle relazioni di AniList: uno spin-off (`SPIN_OFF`, `SIDE_STORY`) resta una serie a
-  sé, e una catena che passa solo da uno speciale si spezza in due. L'ordine delle stagioni è per anno e stagione d'uscita.
+  sé. Uno speciale-riassunto collegato come sequel compare fra le stagioni ("Speciale"). L'ordine delle stagioni è per
+  anno e stagione d'uscita.
 - **Inviti per email esatta.** L'invito vale per l'email scritta, confrontata in minuscolo con quella dell'account Google.
   Alias come `nome.cognome@gmail.com` / `nomecognome@gmail.com` o `+etichetta` non vengono riconosciuti: serve l'email
   con cui la persona accede. Non c'è notifica: il destinatario vede l'invito aprendo l'app.

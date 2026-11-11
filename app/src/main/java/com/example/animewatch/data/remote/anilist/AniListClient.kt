@@ -79,13 +79,14 @@ internal fun MediaDto.toAnime(): Anime = Anime(
 )
 
 /**
- * Solo le relazioni che proseguono la storia, verso schede che possono essere una "stagione".
- * Speciali e video musicali restano fuori: spesso sono riassunti o extra, non puntate da seguire.
+ * Solo le relazioni che proseguono la storia. Gli speciali restano: quando sono prequel/sequel sono puntate della
+ * trama e a volte l'unico anello fra due stagioni (Dr. Stone: Stone Wars -> speciale "Ryusui" -> New World).
+ * Le schede annunciate non hanno ancora un formato (null) e restano anche loro. Fuori solo i video musicali.
  */
-private val SEASON_FORMATS = setOf("TV", "TV_SHORT", "ONA", "OVA", "MOVIE")
+private fun isSeasonFormat(format: String?): Boolean = format != "MUSIC"
 
 private fun MediaDto.relatedOf(type: String): List<Int> =
     relations?.edges.orEmpty()
-        .filter { it.relationType == type && it.node?.type == "ANIME" && it.node.format in SEASON_FORMATS }
+        .filter { it.relationType == type && it.node?.type == "ANIME" && isSeasonFormat(it.node.format) }
         .mapNotNull { it.node?.id }
         .distinct()

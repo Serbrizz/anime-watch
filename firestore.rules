@@ -14,7 +14,8 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly([
              'id', 'title', 'titleEnglish', 'coverUrl', 'genres', 'episodes',
              'airedEpisodes', 'status', 'season', 'seasonYear', 'averageScore',
-             'description', 'cachedAt', 'format', 'prequelIds', 'sequelIds'])
+             'description', 'cachedAt', 'v', 'format', 'prequelIds', 'sequelIds'])
+        && (!('v' in request.resource.data) || request.resource.data.v is int)
         && request.resource.data.keys().hasAll(['id', 'title', 'genres', 'cachedAt'])
         && (!('format' in request.resource.data) || request.resource.data.format is string)
         && (!('prequelIds' in request.resource.data)

@@ -30,7 +30,7 @@ class RecommendationsViewModel(private val service: RecommendationService) : Vie
 
     enum class AiStatus { CHECKING, AVAILABLE, UNAVAILABLE }
 
-    /** Esito del preflight sul proxy: l'interruttore AI è attivo solo con AVAILABLE. */
+    /** Esito del preflight sul proxy: il pulsante Gemini si può accendere salvo con UNAVAILABLE. */
     private val _aiStatus = MutableStateFlow(AiStatus.CHECKING)
     val aiStatus: StateFlow<AiStatus> = _aiStatus.asStateFlow()
     private var aiJob: Job? = null
@@ -48,7 +48,7 @@ class RecommendationsViewModel(private val service: RecommendationService) : Vie
         }
     }
 
-    /** [wantsLlm] è l'interruttore: l'AI si usa solo se anche il preflight dice di sì. */
+    /** [wantsLlm] è il pulsante Gemini: l'AI si usa solo se anche il preflight dice di sì. */
     fun load(
         progress: Collection<WatchProgress>,
         watchedTitles: List<String>,

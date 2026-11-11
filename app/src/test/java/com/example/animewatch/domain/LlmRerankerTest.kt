@@ -25,12 +25,12 @@ class LlmRerankerTest {
     }
 
     @Test
-    fun `scarta chi non ha titolo o puntate viste e si ferma a 15`() {
-        val many = (100 until 120).map { progress(it, watched = 1, total = 12, updatedAt = it.toLong()) }
+    fun `scarta chi non ha titolo o puntate viste e si ferma a 200`() {
+        val many = (100 until 320).map { progress(it, watched = 1, total = 12, updatedAt = it.toLong()) }
         val lines = LlmReranker.describeWatched(
             many + progress(4, watched = 0, total = 12, updatedAt = 999) + progress(5, watched = 3, total = 12, updatedAt = 998),
         ) { if (it == 5) null else titles[it] ?: "Anime $it" }
-        assertEquals(15, lines.size)
-        assertEquals("Anime 119 (1/12)", lines.first())
+        assertEquals(200, lines.size)
+        assertEquals("Anime 319 (1/12)", lines.first())
     }
 }

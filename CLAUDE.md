@@ -147,7 +147,7 @@ importare nulla di Android (resta testabile sulla JVM).
 | `anime/{animeId}` | Copertina, generi, trama, "Aggiungi a una lista" (aggiunge la serie), sotto il menu a tendina "Stagione" (se più d'una: etichetta, titolo, spunta sulle viste; c'è da subito se la scheda ha prequel/sequel e, finché le stagioni caricano, mostra il titolo di quella aperta e un indicatore di attesa), griglia di chip per puntata, "Segna tutte"/"Azzera" |
 | `search` | Campo di ricerca, una riga per serie dalla più popolare (la sua stagione più popolare fra i risultati) con "+" per aggiungere a una lista; sopra, l'avviso se si è cercato senza l'ultima parola |
 | — (pannello "Aggiungi a una lista") | Dal "+" di Cerca e Consigliati e dal pulsante della scheda: copertina e titolo, una scheda per lista modificabile da accendere/spegnere (vale per la serie), "Nuova lista con questo anime", "Fatto" |
-| `recs` | Generi dominanti, interruttore "Affina con AI" (solo se il proxy è configurato; disattivato con "Non disponibile al momento" se il preflight dice no), elenco con affinità % e motivo |
+| `recs` | Solo se il proxy è configurato, un'intestazione di altezza fissa (nulla si sposta quando il pulsante cambia forma) col pulsante "Affina con Gemini" e il suo logo a destra, disattivato con "Gemini non è disponibile al momento" se il preflight dice no. Acceso si riduce a un cerchio col logo, con un anello mentre l'AI lavora e, a riordino fatto, logo verde e spunta animata; ritoccato torna l'elenco dell'algoritmo. Se l'algoritmo fallisce o non trova candidati torna aperto (ritoccarlo riprova). Elenco con affinità % e motivo, con la stella di Gemini davanti all'affinità se l'ha data l'AI; mentre si ricalcola resta quello di prima, sbiadito. I generi dominanti non si mostrano |
 
 Titoli degli anime ovunque in inglese, se AniList lo conosce, altrimenti in romaji (`Anime.englishOrRomaji`); nella
 scheda il romaji compare sotto come sottotitolo. La ricerca resta su entrambi.
@@ -250,7 +250,7 @@ dove `response_format` è `{type: "json_schema", json_schema: {name, schema}}`. 
 6. restituisce la risposta nel formato OpenAI (`choices[0].message.content`) e registra modello, motivo di arresto e
    token; gli errori di Gemini tornano con lo stesso codice (429 = quota gratuita finita) e il messaggio.
 Il modello riceve una **lista chiusa** di 30 candidati reali (id, titolo, generi, voto medio), i generi dominanti e fino a
-15 anime visti dai più recenti con quanto se ne è visto ("tutto", "12/24"), e restituisce per ognuno affinità 0-100 e
+200 anime visti (in pratica tutti; il limite tiene la richiesta sotto i 64 KB) dai più recenti, con quanto se ne è visto ("tutto", "12/24"), e restituisce per ognuno affinità 0-100 e
 motivo: `[{id, affinity, reason}]` (§7.5). Non può inventare titoli. Ogni anomalia (rete, JSON non valido, ID sconosciuti) => `null` => si usa l'algoritmo.
 Risponde in 2-4 secondi; l'app aspetta comunque fino a 90 s (lettura e chiamata).
 
@@ -258,7 +258,7 @@ Risponde in 2-4 secondi; l'app aspetta comunque fino a 90 s (lettura e chiamata)
 metadati del primo modello (`GET models/<modello>`, non consuma quota), quindi verifica chiave e modello. La quota
 residua Gemini non la espone. L'app lo chiama all'apertura di Consigliati (se l'AI non risulta già disponibile) e su "Aggiorna"
 (il ricalcolo ne attende l'esito); con `false`, se il preflight fallisce o se un riordino fallisce dopo un preflight riuscito (es. quota finita),
-l'interruttore AI si disattiva con la scritta rossa "Non disponibile al momento".
+il pulsante Gemini si disattiva con la scritta rossa "Gemini non è disponibile al momento".
 
 **GitHub** — `GET https://api.github.com/repos/<appReleaseRepo>/releases?per_page=30`, senza token (limite 60 richieste/ora
 per IP; l'app ne fa una ogni 6 ore): funziona solo se il repository è **pubblico**. Con un repository privato risponde
@@ -286,7 +286,8 @@ dell'allegato dell'ultima.
    l'ordine non cambiava. Senza proxy configurato o in errore si mostrano le prime 20 dell'algoritmo.
 6. **Quando si ricalcola.** I consigli (dell'algoritmo e dell'AI, separatamente) restano in memoria in
    `RecommendationService` finché l'utente non **inizia un anime nuovo**: riaprire la schermata, segnare altre puntate di
-   anime già iniziati o accendere e spegnere l'AI non costano richieste. "Aggiorna" forza il ricalcolo. Gli anime aggiunti a
+   anime già iniziati o accendere e spegnere l'AI non costano richieste. "Aggiorna" forza il ricalcolo. Il calcolo
+   dell'algoritmo gira nello scope del servizio: accendendo l'AI a metà caricamento la nuova richiesta lo riusa. Gli anime aggiunti a
    una lista nel frattempo li toglie la schermata. Al riavvio dell'app si ricalcola.
 
 ## 8. Configurazione
@@ -319,7 +320,7 @@ cambiare mai**. Dà accesso anche a tutto ciò che è firmato con lo stesso keys
 
 ### Proxy AI (Cloudflare Worker)
 L'app non ha bisogno di nessuna chiave. Conosce solo l'indirizzo del Worker, `aiProxyUrl` in `gradle.properties`: se è
-vuoto l'interruttore AI non compare. Il Worker `animewatch-ai` è sull'account Cloudflare di chi lo gestisce; per
+vuoto il pulsante Gemini non compare. Il Worker `animewatch-ai` è sull'account Cloudflare di chi lo gestisce; per
 modificarlo serve l'accesso a quell'account, che Cloudflare permette di condividere invitando membri. Da `proxy/`:
 ```
 npm install                                  # una volta: wrangler alla versione fissata
@@ -350,7 +351,7 @@ Android Studio (Koala o successivo) apre la cartella e fa tutto da solo. La CI (
 - **Proxy AI.** La chiave Gemini non è nell'APK. L'URL del Worker è pubblico, ma risponde solo a chi ha un ID token
   del progetto Firebase. Chiunque abbia un account Google può però accedere all'app e quindi usare il proxy, entro
   10 richieste al minuto. La chiave è sul piano gratuito, senza fatturazione: non si paga nulla. La quota giornaliera
-  è condivisa da tutti gli utenti dell'app; finita, l'interruttore AI risulta "Non disponibile al momento" fino al
+  è condivisa da tutti gli utenti dell'app; finita, il pulsante Gemini risulta "non disponibile al momento" fino al
   giorno dopo. Google cambia ogni tanto quote e modelli gratuiti.
 - **Aggiornamenti.** Il repository delle release deve essere pubblico (§6). L'APK scaricato è verificato con dimensione e
   sha256 di GitHub; Android stesso rifiuta un APK con firma diversa o `versionCode` non maggiore.
@@ -394,8 +395,10 @@ Verificato (11/11/2026):
 - `verifySigningKey` ferma la build con un keystore diverso o senza `keystore.properties`.
 - Proxy pubblicato: risponde 401 senza token o con token falsi o firmati da chiavi sconosciute, 405 ai GET e 404 agli
   altri percorsi. `npm test` copre la verifica del token (firma, aud, iss, scadenza, uid).
-- "Affina con AI" su dispositivo (debug) con Gemini: preflight, riordino con schema e motivi in italiano; con il proxy
-  che risponde `false` l'interruttore è disattivato con "Non disponibile al momento".
+- "Affina con Gemini" su dispositivo (debug): preflight, riordino con schema e motivi in italiano; con il proxy
+  che risponde `false` o senza rete il pulsante è disattivato con "Gemini non è disponibile al momento".
+  Cerchio con anello, logo verde e spunta; spento e riacceso torna il risultato in memoria senza chiamare Gemini;
+  acceso durante il primo caricamento l'algoritmo si calcola una volta sola; con AniList in errore (simulato) torna aperto.
 
 Da verificare:
 1. Su dispositivo, con due account Google: invito, accettazione, rifiuto, sola visualizzazione, uscita, modalità aereo.

@@ -2,7 +2,19 @@
 
 package com.example.animewatch.ui.recs
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.unit.em
+import com.example.animewatch.domain.Recommendation
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,7 +31,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -91,29 +102,35 @@ fun RecommendationsScreen(
                 return@Column
             }
 
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text(
-                    "Basato sui tuoi generi: ${topGenres.joinToString(", ")}",
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                if (vm.llmAvailable) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Affina con AI", style = MaterialTheme.typography.bodyMedium)
-                            if (aiStatus == AiStatus.UNAVAILABLE) {
-                                Text(
-                                    "Non disponibile al momento",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                )
-                            }
+            // Altezza fissa: quando il pulsante si stringe a cerchio non deve spostarsi niente. Chiuso, il cerchio sta
+            // in colonna con i "+" delle righe.
+            if (vm.llmAvailable) {
+                Row(
+                    Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.weight(1f)) {
+                        if (aiStatus == AiStatus.UNAVAILABLE) {
+                            Text(
+                                "Gemini non è disponibile al momento",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                maxLines = 2,
+                            )
                         }
-                        Switch(
-                            checked = useLlm && aiStatus == AiStatus.AVAILABLE,
-                            onCheckedChange = { useLlm = it },
-                            enabled = aiStatus == AiStatus.AVAILABLE,
-                        )
                     }
+                    // Durante il preflight si può già accendere: il caricamento ne attende l'esito. A caricamento finito
+                    // senza l'AI (errore, nessun candidato) torna aperto: Gemini non ha avuto niente da riordinare.
+                    val active = useLlm && aiStatus != AiStatus.UNAVAILABLE && (state.loading || state.llmUsed)
+                    GeminiButton(
+                        active = active,
+                        loading = state.loading,
+                        done = active && !state.loading,
+                        enabled = aiStatus != AiStatus.UNAVAILABLE,
+                        // Se è rimasto acceso ma l'AI non è partita, ritoccarlo riprova.
+                        onToggle = { on -> if (on && useLlm) reload() else useLlm = on },
+                        modifier = Modifier.padding(start = 12.dp),
+                    )
                 }
             }
 
@@ -122,11 +139,17 @@ fun RecommendationsScreen(
             // era in cima, nascondendo il nuovo primo consiglio: si torna all'inizio.
             val listState = rememberLazyListState()
             LaunchedEffect(state.items) { listState.scrollToItem(0) }
+            // Mentre si ricalcola resta l'elenco di prima, sbiadito: l'attesa la mostra già l'anello sul pulsante Gemini.
+            val listAlpha by animateFloatAsState(if (state.loading) 0.4f else 1f, label = "listAlpha")
             when {
-                state.loading -> CircularProgressIndicator(Modifier.padding(24.dp))
+                state.loading && visible.isEmpty() -> CircularProgressIndicator(Modifier.padding(24.dp))
                 state.error != null -> EmptyState(state.error.orEmpty())
                 visible.isEmpty() -> EmptyState("Nessun consiglio al momento.")
-                else -> LazyColumn(state = listState, contentPadding = PaddingValues(horizontal = 16.dp)) {
+                else -> LazyColumn(
+                    state = listState,
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    modifier = Modifier.alpha(listAlpha),
+                ) {
                     items(visible, key = { it.anime.id }) { rec ->
                         AnimeRow(
                             anime = rec.anime,
@@ -137,11 +160,7 @@ fun RecommendationsScreen(
                                 }
                             },
                         ) {
-                            Text(
-                                "Affinità ${(rec.score * 100).roundToInt()}% · ${rec.matchedGenres.joinToString(", ")}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
+                            AffinityText(rec, fromGemini = state.llmUsed)
                             rec.reason?.let {
                                 Text(it, style = MaterialTheme.typography.bodySmall)
                             }
@@ -156,3 +175,27 @@ fun RecommendationsScreen(
         AddToListSheet(appVm, anime, onDismiss = { addTarget = null })
     }
 }
+
+/** "Affinità 90% · generi", con la stella di Gemini davanti se l'affinità l'ha data l'AI. */
+@Composable
+private fun AffinityText(rec: Recommendation, fromGemini: Boolean) {
+    val text = buildAnnotatedString {
+        if (fromGemini) {
+            appendInlineContent(GEMINI_MARK, "Gemini: ")
+            append(" ")
+        }
+        append("Affinità ${(rec.score * 100).roundToInt()}% · ${rec.matchedGenres.joinToString(", ")}")
+    }
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.primary,
+        inlineContent = mapOf(
+            GEMINI_MARK to InlineTextContent(Placeholder(1.em, 1.em, PlaceholderVerticalAlign.TextCenter)) {
+                GeminiLogo(green = 0f, modifier = Modifier.fillMaxSize())
+            },
+        ),
+    )
+}
+
+private const val GEMINI_MARK = "gemini"

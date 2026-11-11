@@ -4,6 +4,10 @@ import com.example.animewatch.data.AnimeRepository
 import com.example.animewatch.data.model.WatchProgress
 import com.example.animewatch.data.remote.anilist.AniListClient
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -33,6 +37,12 @@ class RecommendationService(
     private var ranked: Ranked? = null
     private var reranked: Pair<Set<Int>, List<Recommendation>>? = null
 
+    // Il calcolo dell'algoritmo vive fuori da chi lo chiede: se l'utente accende Gemini a metà caricamento, la nuova
+    // richiesta annulla la vecchia ma riusa questo calcolo invece di rifare le richieste ad AniList.
+    // Sul main thread, come chi legge e scrive `ranked`.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var pending: Pair<Set<Int>, Deferred<Ranked?>>? = null
+
     /** [force]: ricalcola anche se gli anime iniziati sono gli stessi dell'ultima volta ("Aggiorna"). */
     suspend fun recommend(
         progress: Collection<WatchProgress>,
@@ -43,7 +53,7 @@ class RecommendationService(
     ): RecommendationResult {
         val started = progress.filter { it.watchedEpisodes.isNotEmpty() }.map { it.animeId }.toSet()
         val base = ranked?.takeIf { !force && it.started == started }
-            ?: rank(progress, started, excludeIds)?.also { ranked = it; reranked = null }
+            ?: baseRanking(progress, started, excludeIds, force).await()
             ?: return RecommendationResult(emptyList(), false)
 
         if (useLlm && reranker.isAvailable && base.series.isNotEmpty()) {
@@ -55,6 +65,21 @@ class RecommendationService(
                 }
         }
         return RecommendationResult(base.series.take(RESULTS), false)
+    }
+
+    /** Il calcolo già in corso per gli stessi anime iniziati, se c'è (e non si forza), altrimenti uno nuovo. */
+    private fun baseRanking(
+        progress: Collection<WatchProgress>,
+        started: Set<Int>,
+        excludeIds: Set<Int>,
+        force: Boolean,
+    ): Deferred<Ranked?> {
+        pending?.takeIf { !force && it.first == started && it.second.isActive }?.let { return it.second }
+        val job = scope.async {
+            rank(progress, started, excludeIds)?.also { ranked = it; reranked = null }
+        }
+        pending = started to job
+        return job
     }
 
     private suspend fun rank(progress: Collection<WatchProgress>, started: Set<Int>, excludeIds: Set<Int>): Ranked? {

@@ -120,7 +120,8 @@ class LlmReranker(private val api: AiProxyApi?) {
 
     companion object {
         private const val TAG = "LlmReranker"
-        private const val WATCHED_FOR_PROMPT = 15
+        // In pratica tutti: un limite serve solo a restare sotto i 64 KB che il proxy accetta (200 titoli ≈ 18 KB).
+        private const val WATCHED_FOR_PROMPT = 200
 
         /**
          * Gli anime visti per il prompt, dai più recenti: "Frieren (tutto)", "Bleach (12/366)". Quanto se ne è visto

@@ -23,8 +23,13 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -36,7 +41,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -44,6 +51,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.animewatch.data.model.Anime
+import com.example.animewatch.data.model.Franchise
 import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.AddToListDialog
 import com.example.animewatch.ui.components.CoverImage
@@ -54,17 +63,30 @@ import com.example.animewatch.ui.components.statusLabel
 fun AnimeDetailScreen(vm: AppViewModel, animeId: Int, onBack: () -> Unit) {
     val animeMap by vm.anime.collectAsStateWithLifecycle()
     val progress by vm.progress.collectAsStateWithLifecycle()
-    val lists by vm.editableLists.collectAsStateWithLifecycle()
-    val anime = animeMap[animeId]
+    val franchises by vm.franchises.collectAsStateWithLifecycle()
+    // Si apre sulla stagione richiesta; il selettore cambia solo quella mostrata, non la rotta.
+    var selectedId by rememberSaveable(animeId) { mutableIntStateOf(animeId) }
+    val anime = animeMap[selectedId]
+    val seasons = (franchises[animeId]?.seasonIds ?: listOf(animeId)).mapNotNull { animeMap[it] }
+    val labels = remember(seasons) { Franchise.seasonLabels(seasons) }
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
-    var expanded by rememberSaveable { mutableStateOf(false) }
+    var expanded by rememberSaveable(selectedId) { mutableStateOf(false) }
 
-    LaunchedEffect(animeId) { vm.ensureAnime(listOf(animeId)) }
+    LaunchedEffect(animeId) {
+        vm.ensureAnime(listOf(animeId))
+        vm.ensureFranchises(listOf(animeId))
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(anime?.title ?: "", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = {
+                    Text(
+                        seasons.firstOrNull()?.englishOrRomaji ?: anime?.englishOrRomaji ?: "",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro")
@@ -78,7 +100,7 @@ fun AnimeDetailScreen(vm: AppViewModel, animeId: Int, onBack: () -> Unit) {
             return@Scaffold
         }
 
-        val watched = progress[animeId]?.watchedEpisodes.orEmpty()
+        val watched = progress[anime.id]?.watchedEpisodes.orEmpty()
         val total = anime.availableEpisodes
         val complete = anime.isSeasonComplete(watched.size)
         val fullWidth: LazyGridItemSpanScope.() -> GridItemSpan = { GridItemSpan(maxLineSpan) }
@@ -95,10 +117,11 @@ fun AnimeDetailScreen(vm: AppViewModel, animeId: Int, onBack: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     CoverImage(anime.coverUrl, Modifier.size(width = 120.dp, height = 170.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(anime.title, style = MaterialTheme.typography.titleLarge)
-                        if (anime.titleEnglish != null && anime.titleEnglish != anime.title) {
+                        Text(anime.englishOrRomaji, style = MaterialTheme.typography.titleLarge)
+                        // Il romaji sotto, se diverso: serve a riconoscere la serie e a cercarla altrove.
+                        if (anime.englishOrRomaji != anime.title) {
                             Text(
-                                anime.titleEnglish,
+                                anime.title,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -137,6 +160,19 @@ fun AnimeDetailScreen(vm: AppViewModel, animeId: Int, onBack: () -> Unit) {
                 OutlinedButton(onClick = { showAddDialog = true }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Text("  Aggiungi a una lista")
+                }
+            }
+
+            // Selettore di stagione: le puntate sotto sono quelle della stagione scelta.
+            if (seasons.size > 1) {
+                item(span = fullWidth) {
+                    SeasonSelector(
+                        seasons = seasons,
+                        labels = labels,
+                        selectedId = selectedId,
+                        isSeen = { it.isSeasonComplete(progress[it.id]?.watchedEpisodes?.size ?: 0) },
+                        onSelect = { selectedId = it },
+                    )
                 }
             }
 
@@ -196,14 +232,62 @@ fun AnimeDetailScreen(vm: AppViewModel, animeId: Int, onBack: () -> Unit) {
         }
 
         if (showAddDialog) {
-            AddToListDialog(
-                anime = anime,
-                lists = lists,
-                onToggle = { list, add ->
-                    if (add) vm.addToList(list.id, anime) else vm.removeFromList(list.id, anime.id)
-                },
-                onDismiss = { showAddDialog = false },
-            )
+            AddToListDialog(vm, anime, onDismiss = { showAddDialog = false })
+        }
+    }
+}
+
+/** Menu a tendina con le stagioni della serie: etichetta (S1, Film…), titolo della scheda e spunta se vista. */
+@Composable
+private fun SeasonSelector(
+    seasons: List<Anime>,
+    labels: List<String>,
+    selectedId: Int,
+    isSeen: (Anime) -> Boolean,
+    onSelect: (Int) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    val selected = seasons.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)
+
+    ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
+        OutlinedTextField(
+            value = labels[selected],
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text("Stagione") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            seasons.forEachIndexed { i, season ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(labels[i], style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                season.englishOrRomaji,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    },
+                    trailingIcon = if (isSeen(season)) {
+                        { Icon(Icons.Default.Check, contentDescription = "Vista", tint = MaterialTheme.colorScheme.primary) }
+                    } else {
+                        null
+                    },
+                    onClick = {
+                        onSelect(season.id)
+                        open = false
+                    },
+                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                )
+            }
         }
     }
 }

@@ -36,7 +36,8 @@ class AniListClient(private val api: AniListApi) {
         const val MEDIA_FIELDS =
             "id title { romaji english } coverImage { large } genres episodes status " +
                 "season seasonYear averageScore description(asHtml: false) " +
-                "nextAiringEpisode { episode }"
+                "nextAiringEpisode { episode } format " +
+                "relations { edges { relationType(version: 2) node { id type format } } }"
 
         val SEARCH =
             "query (\$search: String) { Page(page: 1, perPage: 25) { " +
@@ -72,4 +73,19 @@ internal fun MediaDto.toAnime(): Anime = Anime(
     seasonYear = seasonYear,
     averageScore = averageScore,
     description = description?.cleanHtml()?.take(2000),
+    format = format,
+    prequelIds = relatedOf("PREQUEL"),
+    sequelIds = relatedOf("SEQUEL"),
 )
+
+/**
+ * Solo le relazioni che proseguono la storia, verso schede che possono essere una "stagione".
+ * Speciali e video musicali restano fuori: spesso sono riassunti o extra, non puntate da seguire.
+ */
+private val SEASON_FORMATS = setOf("TV", "TV_SHORT", "ONA", "OVA", "MOVIE")
+
+private fun MediaDto.relatedOf(type: String): List<Int> =
+    relations?.edges.orEmpty()
+        .filter { it.relationType == type && it.node?.type == "ANIME" && it.node.format in SEASON_FORMATS }
+        .mapNotNull { it.node?.id }
+        .distinct()

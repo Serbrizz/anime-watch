@@ -84,9 +84,11 @@ class ListDataSource(private val db: FirebaseFirestore) {
             .logFailure("addToList")
     }
 
-    fun removeFromList(listId: String, animeId: Int) {
+    /** Più ID insieme: togliere un franchise toglie tutte le sue stagioni presenti nella lista. */
+    fun removeFromList(listId: String, animeIds: Collection<Int>) {
+        if (animeIds.isEmpty()) return
         lists.document(listId)
-            .update("animeIds", FieldValue.arrayRemove(animeId), "updatedAt", System.currentTimeMillis())
+            .update("animeIds", FieldValue.arrayRemove(*animeIds.toTypedArray()), "updatedAt", System.currentTimeMillis())
             .logFailure("removeFromList")
     }
 

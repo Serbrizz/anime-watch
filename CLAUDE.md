@@ -11,6 +11,8 @@ anime consigliati in base ai generi già guardati. Dati anime da AniList, dati u
 1. **Liste.** L'utente crea più liste con nome libero (es. "Da vedere in inverno"), vi aggiunge e toglie anime, le elimina.
 2. **Puntate.** Nella scheda di un anime ogni puntata è una chip che si segna/toglie come vista.
 3. **Stagioni.** In AniList ogni stagione è una scheda a sé (S1, S2… sono ID diversi), quindi *stagione* = *scheda anime*.
+   Le schede collegate come prequel/sequel (film e OVA compresi) formano un **franchise**: nelle liste è un anime solo,
+   nella scheda un menu a tendina (S1, S2, Film…) sceglie la stagione di cui segnare le puntate.
    Una stagione risulta **vista** solo se è conclusa (`status = FINISHED`) **e** tutte le puntate sono segnate.
    Pulsante "Segna tutte come viste" per chiudere la stagione in un tocco; "Azzera" per annullare.
    Per le serie in corso le puntate disponibili sono quelle già uscite (`nextAiringEpisode - 1`).
@@ -78,7 +80,8 @@ app/src/main/java/com/example/animewatch/
 ├─ di/AppContainer.kt          costruisce Retrofit, Firestore, repository, servizi
 ├─ data/
 │  ├─ model/Models.kt          Anime, WatchProgress, AnimeList, ListRole, ListInvite, UserProfile (+ regole di dominio)
-│  ├─ AnimeRepository.kt       memoria -> Firestore `anime/` -> AniList
+│  ├─ model/Franchise.kt       stagioni di una serie: raggruppamento, ordine, etichette, stagione corrente (puro, testato)
+│  ├─ AnimeRepository.kt       memoria -> Firestore `anime/` -> AniList; catena prequel/sequel a ondate
 │  ├─ firebase/AuthDataSource  accesso con Google (Credential Manager -> Firebase), uscita, profilo utente
 │  ├─ firebase/ListDataSource  liste (anche condivise), membri, inviti, migrazione dal vecchio formato
 │  ├─ firebase/UserDataSource  progressi (flussi in tempo reale)
@@ -116,12 +119,15 @@ importare nulla di Android (resta testabile sulla JVM).
 | — (login) | Fuori dal NavHost: logo, pulsante "Accedi con Google", errore. Compare finché non c'è un utente |
 | `lists` | Elenco liste (n. anime, n. stagioni viste, contrassegno "Condivisa"), FAB "nuova lista", elimina (proprietario) o esci (altri) con conferma; nella barra "Inviti" con contatore e un menu (pallino se c'è un aggiornamento): "Verifica aggiornamenti" / "Aggiorna alla versione X", "Esci dall'account", versione installata |
 | — (aggiornamento) | Popup fuori dal NavHost, anche sul login: versione nuova, note della release, avanzamento del download; "Aggiorna ora" / "Più tardi" |
-| `list/{listId}` | Anime della lista con barra di avanzamento e spunta se stagione vista; rimuovi dalla lista solo con permesso di modifica; icona condivisione |
+| `list/{listId}` | Una riga per serie (copertina della S1): stagioni viste su totali, puntate e barra della stagione corrente, spunta se tutte viste; il tocco apre la stagione corrente; rimuovi (tutte le stagioni) solo con permesso di modifica; icona condivisione |
 | `list/{listId}/members` | Membri con ruolo. Proprietario: invito per email + ruolo, inviti in attesa da ritirare, cambia ruolo / rimuovi membro. Altri: "Esci dalla lista" |
 | `invites` | Inviti ricevuti: lista, chi invita, ruolo; "Accetta" / "Rifiuta" |
-| `anime/{animeId}` | Copertina, generi, trama, griglia di chip per puntata, "Segna tutte"/"Azzera", "Aggiungi a una lista" |
+| `anime/{animeId}` | Copertina, generi, trama, "Aggiungi a una lista" (aggiunge la serie), sotto il menu a tendina "Stagione" (se più d'una: etichetta, titolo, spunta sulle viste), griglia di chip per puntata, "Segna tutte"/"Azzera" |
 | `search` | Campo di ricerca, risultati con "+" per aggiungere a una lista |
 | `recs` | Generi dominanti, interruttore "Affina con AI" (solo se la chiave c'è), elenco con affinità % e motivo |
+
+Titoli degli anime ovunque in inglese, se AniList lo conosce, altrimenti in romaji (`Anime.englishOrRomaji`); nella
+scheda il romaji compare sotto come sottotitolo. La ricerca resta su entrambi.
 
 Stringhe UI in italiano scritte direttamente nei composable (app monolingua, scelta volontaria: se serve l'inglese,
 spostarle in `strings.xml`).
@@ -131,10 +137,11 @@ spostarle in `strings.xml`).
 ```
 anime/{anilistId}                    CACHE CONDIVISA fra tutti gli utenti
   id, title, titleEnglish?, coverUrl?, genres[], episodes?, airedEpisodes?,
-  status?, season?, seasonYear?, averageScore?, description?, cachedAt (ms)
+  status?, season?, seasonYear?, averageScore?, description?, format?,
+  prequelIds[], sequelIds[]          (solo verso TV, TV_SHORT, ONA, OVA, MOVIE), cachedAt (ms)
 
 lists/{listId}                       una lista, personale o condivisa
-  name, ownerId, createdAt (ms), updatedAt (ms), animeIds[]   (arrayUnion/arrayRemove: niente duplicati)
+  name, ownerId, createdAt (ms), updatedAt (ms), animeIds[]   (ID della prima stagione di ogni serie; arrayUnion/arrayRemove)
   members   { uid: "owner" | "editor" | "viewer" }            i permessi (le regole leggono da qui)
   memberIds [uid…]                                            copia delle chiavi di members, per la query array-contains
   profiles  { uid: { name, photoUrl? } }                      nome e foto da mostrare; ognuno scrive il proprio
@@ -168,7 +175,14 @@ in `lists/` con lo stesso ID e cancella le vecchie; quando non ce ne sono più, 
 - `genres` è copiato nel progresso (denormalizzazione voluta): il profilo dei gusti si calcola leggendo solo `progress`.
 - I campi null **non** si scrivono (le regole validano solo i campi presenti).
 - Se non resta nessuna puntata vista il documento di progresso viene **cancellato**.
-- TTL della cache: serie concluse 30 giorni, serie in corso 12 ore (escono nuove puntate). Se AniList non risponde si usa il dato scaduto.
+- TTL della cache: serie concluse 30 giorni (7 se senza seguito, per scoprire una nuova stagione annunciata), serie in corso
+  12 ore (escono nuove puntate). Le schede salvate senza `sequelIds` (prima dei franchise) valgono come scadute.
+  Se AniList non risponde si usa il dato scaduto.
+- **Franchise.** Non si salvano: si ricostruiscono nel client seguendo `prequelIds`/`sequelIds` (`getWithRelated`, una
+  `getMany` per livello della catena, al massimo 30 livelli e 300 schede). La lista salva la stagione uscita per prima;
+  aggiungere un'altra stagione della stessa serie non cambia nulla, togliere la serie toglie tutte le sue stagioni.
+  Le liste di prima possono avere più stagioni della stessa serie: si mostrano come una riga sola, senza migrazione.
+  Il progresso resta per stagione (`users/{uid}/progress/{anilistId}`).
 - `firestore.rules`: `anime/` leggibile/scrivibile da utenti autenticati con validazione di campi, tipi e ID, **mai cancellabile**;
   `users/{uid}/**` solo dal proprietario; `lists/` leggibile dai membri e modificabile secondo il ruolo (tabella sopra);
   `invites/` leggibile e cancellabile solo da mittente e destinatario, creabile solo dal proprietario della lista.
@@ -184,6 +198,9 @@ in `lists/` con lo stesso ID e cancella le vecchie; quando non ce ne sono più, 
 **AniList** — un solo endpoint, `POST /` con `{query, variables}`. Tre query in `AniListClient`:
 `search` (`media(search:…, sort: SEARCH_MATCH)`), `byIds` (`id_in`, max 50), `popularByGenre` (`genre:…`, `POPULARITY_DESC`, formati TV/MOVIE/OVA/ONA).
 Sempre `isAdult: false` dove si cerca. Limite ~90 richieste/minuto: le chiamate sono ridotte da cache e debounce.
+Ogni query chiede anche `format` e `relations` (`relationType(version: 2)`): si tengono solo `PREQUEL`/`SEQUEL` verso
+anime TV, TV_SHORT, ONA, OVA o MOVIE. Speciali e video musicali restano fuori (spesso riassunti o extra). AniList non
+mette sempre la relazione inversa, quindi il raggruppamento la tratta come non orientata.
 
 **OpenRouter, tramite il proxy** — l'app fa `POST <aiProxyUrl>chat/completions` con header
 `Authorization: Bearer <ID token Firebase dell'utente>` e corpo `{messages, temperature}`. Il Worker:
@@ -208,9 +225,14 @@ per IP; l'app ne fa una ogni 6 ore): funziona solo se il repository è **pubblic
    Una richiesta per genere perché non è garantito se `genre_in` combini i generi in AND o in OR.
 3. **Punteggio.** `0,75 · coseno(generi del candidato, profilo) + 0,25 · voto medio/100`. Il coseno misura quanto i generi
    del candidato puntano nella stessa direzione dei gusti dell'utente e non premia chi ha molti generi né chi ha guardato molto.
-   Candidati senza alcun genere in comune scartati; già in lista o con progresso esclusi.
-4. **Riordino AI (opzionale).** I primi 30 vanno a OpenRouter, che ne sceglie 12 con motivazione; senza proxy configurato o in errore si mostrano i primi 20 dell'algoritmo.
-5. **Quando si ricalcola.** All'apertura, al tocco su "Aggiorna", e solo se cambiano i 3 generi dominanti o l'interruttore AI
+   Candidati senza alcun genere in comune scartati. Esclusa ogni stagione delle serie già in lista o iniziate: il loro
+   franchise (§5) si ricostruisce in parallelo alle richieste dei candidati, di solito dalla memoria perché lo usano le liste.
+   Escluso anche chi ha come prequel/sequel diretto una scheda esclusa.
+4. **Una serie, una volta.** Senza richieste in più: i candidati collegati come prequel/sequel, anche attraverso l'ID di
+   una stagione che non è fra i candidati, diventano un consiglio solo, al posto e col punteggio del migliore, mostrato
+   con la stagione uscita prima. Non si ricostruiscono i franchise dei candidati: costerebbe troppe richieste in serie.
+5. **Riordino AI (opzionale).** Le prime 30 serie vanno a OpenRouter, che ne sceglie 12 con motivazione; senza proxy configurato o in errore si mostrano le prime 20 dell'algoritmo.
+6. **Quando si ricalcola.** All'apertura, al tocco su "Aggiorna", e solo se cambiano i 3 generi dominanti o l'interruttore AI
    (non a ogni puntata segnata: ogni calcolo costa richieste ad AniList).
 
 ## 8. Configurazione
@@ -258,7 +280,7 @@ versione dell'app, basta un deploy.
 
 ### Build e test
 ```
-./gradlew :app:testDebugUnitTest          # unit test (raccomandazioni, liste condivise, versioni)
+./gradlew :app:testDebugUnitTest          # unit test (raccomandazioni, liste condivise, franchise, versioni)
 ./gradlew :app:assembleDebug              # APK in app/build/outputs/apk/debug/
 .\install.ps1 [-Release] [-Serial <id>]   # git fetch + pull --ff-only, build, adb install -r sul telefono collegato
 ```
@@ -279,8 +301,11 @@ Android Studio (Koala o successivo) apre la cartella e fa tutto da solo. La CI (
 - **Solo accesso con Google.** L'UID è legato all'account Google, quindi liste e progressi seguono l'utente su ogni
   dispositivo e sopravvivono alla disinstallazione. Niente accesso anonimo né email/password.
 - **Primo accesso offline.** Il primo accesso richiede rete; dopo, Firebase conserva la sessione e l'app si apre anche offline.
-- **Sequel nei consigli.** Se l'utente guarda S1, la S2 (stessi generi) può comparire tra i consigliati. Soluzione prevista:
-  leggere `relations` da AniList ed escludere le schede collegate a ciò che è già visto.
+- **Stagioni nei consigli.** Due stagioni della stessa serie compaiono entrambe solo se fra loro mancano, fra i candidati,
+  almeno due stagioni consecutive; in quel caso si mostra la prima uscita fra i candidati, che può non essere la S1.
+  Se AniList non risponde mentre si ricostruiscono le serie dell'utente, un loro seguito può passare.
+- **Confini del franchise.** Dipendono dalle relazioni di AniList: uno spin-off (`SPIN_OFF`, `SIDE_STORY`) resta una serie a
+  sé, e una catena che passa solo da uno speciale si spezza in due. L'ordine delle stagioni è per anno e stagione d'uscita.
 - **Inviti per email esatta.** L'invito vale per l'email scritta, confrontata in minuscolo con quella dell'account Google.
   Alias come `nome.cognome@gmail.com` / `nomecognome@gmail.com` o `+etichetta` non vengono riconosciuti: serve l'email
   con cui la persona accede. Non c'è notifica: il destinatario vede l'invito aprendo l'app.
@@ -309,6 +334,9 @@ Da verificare:
 2. Aggiornamento completo (popup, download, permesso "installa app sconosciute", installazione): possibile solo con il
    repository pubblico e almeno due release.
 3. "Affina con AI" su dispositivo, con un utente vero che passa dal proxy fino a OpenRouter.
+4. Franchise su dispositivo, dopo aver pubblicato le regole con i campi nuovi di `anime/` (senza, la scrittura in cache
+   fallisce e ogni apertura rilegge da AniList): selettore di stagione, lista con S1 e S2 già presenti, aggiunta della S2
+   di una serie già in lista, rimozione, offline.
 
 Le regole di `lists/` e `invites/` sono provate nell'emulatore Firestore con `@firebase/rules-unit-testing`
 (66 casi: creazione, lettura, inviti, ingresso con ruolo giusto e sbagliato, editor, viewer, rifiuto, ritiro,

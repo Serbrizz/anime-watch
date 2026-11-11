@@ -54,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.animewatch.data.model.AnimeList
+import com.example.animewatch.data.model.Franchise
 import com.example.animewatch.data.model.ListRole
 import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.EmptyState
@@ -77,8 +78,10 @@ fun ListsScreen(
     var showCreate by rememberSaveable { mutableStateOf(false) }
     var toDelete by remember { mutableStateOf<AnimeList?>(null) }
 
-    // Servono le schede per sapere quante stagioni sono davvero concluse.
-    LaunchedEffect(lists) { vm.ensureAnime(lists.flatMap { it.animeIds }) }
+    val franchises by vm.franchises.collectAsStateWithLifecycle()
+
+    // Servono tutte le stagioni di ogni serie per sapere quante sono davvero concluse.
+    LaunchedEffect(lists) { vm.ensureFranchises(lists.flatMap { it.animeIds }) }
 
     Scaffold(
         topBar = {
@@ -164,7 +167,8 @@ fun ListsScreen(
                     }
                 }
                 items(lists, key = { it.id }) { list ->
-                    val seen = list.animeIds.count { id ->
+                    val groups = Franchise.groupList(list.animeIds, franchises)
+                    val seen = groups.flatMap { it.seasonIds }.count { id ->
                         animeMap[id]?.isSeasonComplete(progress[id]?.watchedEpisodes?.size ?: 0) == true
                     }
                     ElevatedCard(onClick = { onOpenList(list.id) }, modifier = Modifier.fillMaxWidth()) {
@@ -175,7 +179,7 @@ fun ListsScreen(
                             Column(Modifier.weight(1f)) {
                                 Text(list.name, style = MaterialTheme.typography.titleMedium)
                                 Text(
-                                    "${list.animeIds.size} anime · $seen stagioni viste",
+                                    "${groups.size} anime · $seen stagioni viste",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )

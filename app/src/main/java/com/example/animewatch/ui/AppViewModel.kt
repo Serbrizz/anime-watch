@@ -13,6 +13,7 @@ import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import androidx.lifecycle.viewModelScope
 import com.example.animewatch.data.model.Anime
 import com.example.animewatch.data.model.AnimeList
+import com.example.animewatch.data.model.Franchise
 import com.example.animewatch.data.model.ListInvite
 import com.example.animewatch.data.model.ListRole
 import com.example.animewatch.data.model.UserProfile
@@ -85,6 +86,13 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     private val _anime = MutableStateFlow<Map<Int, Anime>>(emptyMap())
     val anime: StateFlow<Map<Int, Anime>> = _anime.asStateFlow()
+
+    /** Per ogni scheda già risolta, il franchise (tutte le stagioni) a cui appartiene. */
+    private val _franchises = MutableStateFlow<Map<Int, Franchise>>(emptyMap())
+    val franchises: StateFlow<Map<Int, Franchise>> = _franchises.asStateFlow()
+
+    /** ID in corso di risoluzione: evita di ripercorrere la stessa catena da più schermate. Solo main thread. */
+    private val resolving = HashSet<Int>()
 
     /** Invito che si sta accettando (per mostrare l'attesa sul pulsante giusto). */
     private val _accepting = MutableStateFlow<String?>(null)
@@ -186,6 +194,36 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    /** Carica le schede e tutte le stagioni dei loro franchise (per le liste e per il selettore di stagione). */
+    fun ensureFranchises(ids: Collection<Int>) {
+        val missing = ids.filter { it !in _franchises.value && it !in resolving }.distinct()
+        if (missing.isEmpty()) return
+        resolving += missing
+        viewModelScope.launch {
+            try {
+                resolve(missing)
+            } finally {
+                resolving -= missing.toSet()
+            }
+        }
+    }
+
+    private suspend fun resolve(ids: Collection<Int>): Map<Int, Franchise> {
+        val related = container.animeRepo.getWithRelated(ids)
+        val groups = Franchise.group(related)
+        _anime.update { it + related }
+        _franchises.update { it + groups }
+        return groups
+    }
+
+    /** Senza rete la catena può restare incompleta: la scheda vale allora come franchise a sé. */
+    private suspend fun franchiseOf(id: Int): Franchise =
+        _franchises.value[id]
+            ?: runCatching { resolve(listOf(id))[id] }
+                .onFailure { if (it is CancellationException) throw it else Log.w(TAG, "Stagioni di $id", it) }
+                .getOrNull()
+            ?: Franchise.single(id)
+
     // ---------- Liste ----------
 
     fun createList(name: String) {
@@ -204,14 +242,33 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    fun addToList(listId: String, anime: Anime) {
-        container.animeRepo.cache(listOf(anime)) // la scheda entra nella cache condivisa
-        container.listData.addToList(listId, anime.id)
-        _anime.update { it + (anime.id to anime) }
+    /** Stagioni del franchise di [animeId] presenti nella lista (più d'una solo nelle liste di prima). */
+    fun idsInList(list: AnimeList, animeId: Int): List<Int> {
+        val seasons = _franchises.value[animeId]?.seasonIds ?: listOf(animeId)
+        return list.animeIds.filter { it in seasons }
     }
 
-    fun removeFromList(listId: String, animeId: Int) {
-        container.listData.removeFromList(listId, animeId)
+    /**
+     * Nella lista va il franchise, salvato con l'ID della prima stagione: aggiungere la S2 di una serie
+     * già presente non crea un doppione. Togliere rimuove tutte le sue stagioni.
+     */
+    fun setInList(list: AnimeList, anime: Anime, add: Boolean) {
+        if (!add) {
+            container.listData.removeFromList(list.id, idsInList(list, anime.id))
+            return
+        }
+        container.animeRepo.cache(listOf(anime)) // la scheda entra nella cache condivisa
+        _anime.update { it + (anime.id to anime) }
+        viewModelScope.launch {
+            val franchise = franchiseOf(anime.id)
+            if (list.animeIds.none { it in franchise.seasonIds }) {
+                container.listData.addToList(list.id, franchise.rootId)
+            }
+        }
+    }
+
+    fun removeFromList(list: AnimeList, franchise: Franchise) {
+        container.listData.removeFromList(list.id, list.animeIds.filter { it in franchise.seasonIds })
     }
 
     // ---------- Condivisione ----------

@@ -59,7 +59,7 @@ class LlmReranker(private val api: OpenRouterApi?) {
         appendLine()
         appendLine("Candidati (id | titolo | generi | voto medio):")
         candidates.forEach {
-            appendLine("${it.anime.id} | ${it.anime.title} | ${it.anime.genres.joinToString()} | ${it.anime.averageScore ?: "n/d"}")
+            appendLine("${it.anime.id} | ${it.anime.englishOrRomaji} | ${it.anime.genres.joinToString()} | ${it.anime.averageScore ?: "n/d"}")
         }
         appendLine()
         append(

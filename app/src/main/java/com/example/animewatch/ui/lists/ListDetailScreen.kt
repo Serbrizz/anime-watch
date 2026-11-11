@@ -24,12 +24,75 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.animewatch.data.model.Anime
+import com.example.animewatch.data.model.Franchise
 import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.AnimeRow
 import com.example.animewatch.ui.components.EmptyState
+
+/**
+ * Una serie nella lista: copertina e titolo della prima stagione, avanzamento della stagione in corso.
+ * Il tocco apre quella stagione, dove il selettore porta alle altre.
+ */
+@Composable
+private fun FranchiseRow(
+    seasons: List<Anime>,
+    watchedCount: (Int) -> Int,
+    onOpen: (Int) -> Unit,
+    onRemove: (() -> Unit)?,
+) {
+    val current = seasons[Franchise.currentSeasonIndex(seasons, watchedCount)]
+    val watched = watchedCount(current.id)
+    val total = current.availableEpisodes
+    val seen = seasons.count { it.isSeasonComplete(watchedCount(it.id)) }
+    val allSeen = seen == seasons.size
+    val episodes = if (total > 0) "$watched/$total puntate viste" else "Puntate non ancora disponibili"
+
+    AnimeRow(
+        anime = seasons.first(),
+        onClick = { onOpen(current.id) },
+        trailing = {
+            if (allSeen) {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = if (seasons.size > 1) "Tutte le stagioni viste" else "Stagione vista",
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+            if (onRemove != null) {
+                IconButton(onClick = onRemove) {
+                    Icon(Icons.Default.Close, contentDescription = "Rimuovi dalla lista")
+                }
+            }
+        },
+    ) {
+        if (seasons.size > 1) {
+            val label = Franchise.seasonLabels(seasons)[seasons.indexOf(current)]
+            Text(
+                "$seen di ${seasons.size} stagioni viste",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "$label · $episodes",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(episodes, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (total > 0) {
+            LinearProgressIndicator(
+                progress = { (watched.toFloat() / total).coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
 
 @Composable
 fun ListDetailScreen(
@@ -46,7 +109,10 @@ fun ListDetailScreen(
     val list = lists.firstOrNull { it.id == listId }
     val canEdit = list?.canEdit(me?.uid) == true
 
-    LaunchedEffect(list?.animeIds) { list?.let { vm.ensureAnime(it.animeIds) } }
+    val franchises by vm.franchises.collectAsStateWithLifecycle()
+    val groups = remember(list?.animeIds, franchises) { Franchise.groupList(list?.animeIds.orEmpty(), franchises) }
+
+    LaunchedEffect(list?.animeIds) { list?.let { vm.ensureFranchises(it.animeIds) } }
 
     Scaffold(
         topBar = {
@@ -95,48 +161,21 @@ fun ListDetailScreen(
                         }
                     }
                 }
-                items(list.animeIds, key = { it }) { id ->
-                    val anime = animeMap[id]
-                    if (anime == null) {
+                items(groups, key = { it.rootId }) { franchise ->
+                    val seasons = franchise.seasonIds.mapNotNull { animeMap[it] }
+                    if (seasons.isEmpty()) {
                         Text(
                             "Caricamento…",
                             Modifier.padding(vertical = 24.dp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
-                        val watched = progress[id]?.watchedEpisodes?.size ?: 0
-                        val total = anime.availableEpisodes
-                        val complete = anime.isSeasonComplete(watched)
-                        AnimeRow(
-                            anime = anime,
-                            onClick = { onOpenAnime(id) },
-                            trailing = {
-                                if (complete) {
-                                    Icon(
-                                        Icons.Default.Check,
-                                        contentDescription = "Stagione vista",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                    )
-                                }
-                                if (canEdit) {
-                                    IconButton(onClick = { vm.removeFromList(list.id, id) }) {
-                                        Icon(Icons.Default.Close, contentDescription = "Rimuovi dalla lista")
-                                    }
-                                }
-                            },
-                        ) {
-                            Text(
-                                if (total > 0) "$watched/$total puntate viste" else "Puntate non ancora disponibili",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            if (total > 0) {
-                                LinearProgressIndicator(
-                                    progress = { (watched.toFloat() / total).coerceIn(0f, 1f) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                        }
+                        FranchiseRow(
+                            seasons = seasons,
+                            watchedCount = { progress[it]?.watchedEpisodes?.size ?: 0 },
+                            onOpen = onOpenAnime,
+                            onRemove = if (canEdit) ({ vm.removeFromList(list, franchise) }) else null,
+                        )
                     }
                 }
             }

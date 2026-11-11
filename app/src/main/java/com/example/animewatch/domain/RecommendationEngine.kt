@@ -1,6 +1,7 @@
 package com.example.animewatch.domain
 
 import com.example.animewatch.data.model.Anime
+import com.example.animewatch.data.model.Franchise
 import com.example.animewatch.data.model.WatchProgress
 import kotlin.math.sqrt
 
@@ -63,7 +64,8 @@ object RecommendationEngine {
     ): List<Recommendation> =
         candidates
             .asSequence()
-            .filter { it.id !in excludeIds }
+            // Anche il seguito o il prequel di ciò che si conosce già: è la stessa serie, non un consiglio.
+            .filter { it.id !in excludeIds && it.relatedIds.none { id -> id in excludeIds } }
             .mapNotNull { anime ->
                 val cosine = similarity(anime.genres, profile)
                 if (cosine <= 0.0) return@mapNotNull null
@@ -78,4 +80,32 @@ object RecommendationEngine {
             }
             .sortedByDescending { it.score }
             .toList()
+
+    /**
+     * Un consiglio per serie: le stagioni di uno stesso anime contano una volta sola, col punteggio della
+     * migliore, e si mostrano con la prima uscita fra i candidati (di solito la S1: si comincia da lì).
+     *
+     * Senza richieste di rete: due candidati sono la stessa serie se sono collegati come prequel/sequel,
+     * anche passando da una stagione che non è fra i candidati (S1 e S3 si ritrovano attraverso l'ID della
+     * S2, che entrambi citano). Sfugge solo un buco di due stagioni consecutive assenti, raro fra i più popolari.
+     * [ranked] è in ordine di punteggio.
+     */
+    fun onePerSeries(ranked: List<Recommendation>): List<Recommendation> {
+        val parent = HashMap<Int, Int>()
+        fun find(id: Int): Int {
+            var root = parent.getOrPut(id) { id }
+            while (root != parent.getValue(root)) root = parent.getValue(root)
+            parent[id] = root
+            return root
+        }
+        for (rec in ranked) {
+            for (other in rec.anime.relatedIds) parent[find(rec.anime.id)] = find(other)
+        }
+        return ranked
+            .groupBy { find(it.anime.id) } // groupBy mantiene l'ordine: il primo di ogni gruppo è il migliore
+            .values
+            .map { series ->
+                series.first().copy(anime = series.map { it.anime }.minWith(Franchise.RELEASE_ORDER))
+            }
+    }
 }

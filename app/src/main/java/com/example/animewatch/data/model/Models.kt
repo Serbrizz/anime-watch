@@ -18,9 +18,19 @@ data class Anime(
     val seasonYear: Int?,
     val averageScore: Int?,
     val description: String?,
+    /** TV, TV_SHORT, ONA, OVA, MOVIE, SPECIAL, MUSIC. */
+    val format: String? = null,
+    /** Schede AniList collegate come stagione precedente/successiva (vedi [Franchise]). */
+    val prequelIds: List<Int> = emptyList(),
+    val sequelIds: List<Int> = emptyList(),
     val cachedAt: Long = System.currentTimeMillis(),
 ) {
     val isFinished: Boolean get() = status == "FINISHED"
+
+    val relatedIds: List<Int> get() = prequelIds + sequelIds
+
+    /** Titolo da mostrare in tutta l'app: inglese se AniList lo conosce, altrimenti romaji. */
+    val englishOrRomaji: String get() = titleEnglish?.takeIf { it.isNotBlank() } ?: title
 
     /** Puntate che l'utente può effettivamente guardare adesso. */
     val availableEpisodes: Int
@@ -34,9 +44,16 @@ data class Anime(
     fun isSeasonComplete(watchedCount: Int): Boolean =
         isFinished && availableEpisodes > 0 && watchedCount >= availableEpisodes
 
-    /** La cache vale poco per le serie in corso (nuove puntate), molto per le concluse. */
+    /**
+     * La cache vale poco per le serie in corso (nuove puntate), molto per le concluse. Una conclusa senza
+     * seguito si rilegge più spesso: se viene annunciata una nuova stagione, la catena deve trovarla.
+     */
     fun isStale(now: Long = System.currentTimeMillis()): Boolean {
-        val ttl = if (isFinished) 30L * DAY_MS else DAY_MS / 2
+        val ttl = when {
+            !isFinished -> DAY_MS / 2
+            sequelIds.isEmpty() -> 7L * DAY_MS
+            else -> 30L * DAY_MS
+        }
         return now - cachedAt > ttl
     }
 

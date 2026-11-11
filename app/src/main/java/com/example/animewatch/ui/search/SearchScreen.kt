@@ -41,7 +41,6 @@ fun SearchScreen(
     onOpenAnime: (Int) -> Unit,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val lists by appVm.editableLists.collectAsStateWithLifecycle()
     var addTarget by remember { mutableStateOf<Anime?>(null) }
 
     Scaffold(topBar = { TopAppBar(title = { Text("Cerca anime") }) }) { padding ->
@@ -85,13 +84,6 @@ fun SearchScreen(
     }
 
     addTarget?.let { anime ->
-        AddToListDialog(
-            anime = anime,
-            lists = lists,
-            onToggle = { list, add ->
-                if (add) appVm.addToList(list.id, anime) else appVm.removeFromList(list.id, anime.id)
-            },
-            onDismiss = { addTarget = null },
-        )
+        AddToListDialog(appVm, anime, onDismiss = { addTarget = null })
     }
 }

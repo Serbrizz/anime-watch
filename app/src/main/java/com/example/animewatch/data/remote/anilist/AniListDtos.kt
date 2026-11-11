@@ -32,7 +32,18 @@ data class MediaDto(
     val averageScore: Int? = null,
     val description: String? = null,
     val nextAiringEpisode: NextEpisodeDto? = null,
+    val format: String? = null,
+    val relations: RelationsDto? = null,
 )
+
+@Serializable
+data class RelationsDto(val edges: List<RelationEdgeDto> = emptyList())
+
+@Serializable
+data class RelationEdgeDto(val relationType: String? = null, val node: RelationNodeDto? = null)
+
+@Serializable
+data class RelationNodeDto(val id: Int, val type: String? = null, val format: String? = null)
 
 @Serializable
 data class TitleDto(val romaji: String? = null, val english: String? = null)

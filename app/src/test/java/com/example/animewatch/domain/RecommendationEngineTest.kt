@@ -62,4 +62,25 @@ class RecommendationEngineTest {
         )
         assertEquals(listOf(22), ranked.map { it.anime.id })
     }
+
+    @Test
+    fun `un consiglio per serie, mostrato con la stagione uscita prima`() {
+        // S1 -> S2 -> S3: la S2 non è fra i candidati, ma S1 e S3 la citano entrambe.
+        val s1 = anime(30, listOf("Action")).copy(seasonYear = 2015, sequelIds = listOf(31))
+        val s3 = anime(32, listOf("Action")).copy(seasonYear = 2019, prequelIds = listOf(31))
+        val other = anime(50, listOf("Action")).copy(seasonYear = 2017)
+        val ranked = listOf(s3, other, s1).map { Recommendation(it, 0.5, listOf("Action")) }
+
+        val result = RecommendationEngine.onePerSeries(ranked)
+
+        // La serie resta al posto della sua stagione migliore (la S3), ma si mostra la S1.
+        assertEquals(listOf(30, 50), result.map { it.anime.id })
+    }
+
+    @Test
+    fun `esclude il seguito diretto di cio che si conosce`() {
+        val sequel = anime(61, listOf("Action")).copy(prequelIds = listOf(60))
+        val ranked = RecommendationEngine.rank(listOf(sequel), profile, excludeIds = setOf(60))
+        assertTrue(ranked.isEmpty())
+    }
 }

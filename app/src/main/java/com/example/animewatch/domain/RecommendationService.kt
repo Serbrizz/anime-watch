@@ -3,6 +3,7 @@ package com.example.animewatch.domain
 import com.example.animewatch.data.AnimeRepository
 import com.example.animewatch.data.model.WatchProgress
 import com.example.animewatch.data.remote.anilist.AniListClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -32,21 +33,32 @@ class RecommendationService(
         if (topGenres.isEmpty()) return RecommendationResult(emptyList(), false)
 
         // Una richiesta per genere: indipendente da come AniList combina più generi (AND/OR).
-        val results = coroutineScope {
-            topGenres.map { genre -> async { runCatching { aniList.popularByGenre(genre) } } }.awaitAll()
+        // Intanto si ricostruiscono le serie che l'utente conosce già (di solito già in memoria: le usano le liste).
+        val (results, knownSeasons) = coroutineScope {
+            val known = async { knownSeasons(excludeIds) }
+            val genres = topGenres.map { genre -> async { runCatching { aniList.popularByGenre(genre) } } }
+            genres.awaitAll() to known.await()
         }
         if (results.all { it.isFailure }) throw results.first().exceptionOrNull()!!
         val candidates = results.flatMap { it.getOrDefault(emptyList()) }.distinctBy { it.id }
         animeRepo.remember(candidates)
 
-        val ranked = RecommendationEngine.rank(candidates, profile, excludeIds)
+        // Via ogni stagione delle serie già note (in lista o iniziate): il seguito di ciò che si è visto non è un consiglio.
+        val ranked = RecommendationEngine.rank(candidates, profile, excludeIds + knownSeasons)
+        val series = RecommendationEngine.onePerSeries(ranked)
 
-        if (useLlm && reranker.isAvailable && ranked.isNotEmpty()) {
-            reranker.rerank(topGenres, watchedTitles, ranked.take(POOL_FOR_LLM), LLM_RESULTS)
+        if (useLlm && reranker.isAvailable && series.isNotEmpty()) {
+            reranker.rerank(topGenres, watchedTitles, series.take(POOL_FOR_LLM), LLM_RESULTS)
                 ?.let { return RecommendationResult(it, true) }
         }
-        return RecommendationResult(ranked.take(RESULTS), false)
+        return RecommendationResult(series.take(RESULTS), false)
     }
+
+    /** Tutte le stagioni delle serie indicate. Senza rete le catene restano incomplete, ma i consigli si mostrano lo stesso. */
+    private suspend fun knownSeasons(ids: Set<Int>): Set<Int> =
+        runCatching { animeRepo.getWithRelated(ids).keys }
+            .onFailure { if (it is CancellationException) throw it }
+            .getOrDefault(emptySet())
 
     private companion object {
         const val TOP_GENRES = 3

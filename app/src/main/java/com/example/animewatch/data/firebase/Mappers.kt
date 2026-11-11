@@ -24,6 +24,9 @@ fun Anime.toMap(): Map<String, Any> = buildMap {
     put("title", title)
     put("genres", genres)
     put("cachedAt", cachedAt)
+    put("prequelIds", prequelIds)
+    put("sequelIds", sequelIds)
+    format?.let { put("format", it) }
     titleEnglish?.let { put("titleEnglish", it) }
     coverUrl?.let { put("coverUrl", it) }
     episodes?.let { put("episodes", it) }
@@ -52,7 +55,11 @@ fun DocumentSnapshot.toAnime(): Anime? {
         seasonYear = int("seasonYear"),
         averageScore = int("averageScore"),
         description = getString("description"),
-        cachedAt = getLong("cachedAt") ?: 0L,
+        format = getString("format"),
+        prequelIds = intList("prequelIds"),
+        sequelIds = intList("sequelIds"),
+        // Le schede salvate prima delle relazioni non sanno nulla delle altre stagioni: scadute subito.
+        cachedAt = if (contains("sequelIds")) getLong("cachedAt") ?: 0L else 0L,
     )
 }
 

@@ -14,8 +14,13 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly([
              'id', 'title', 'titleEnglish', 'coverUrl', 'genres', 'episodes',
              'airedEpisodes', 'status', 'season', 'seasonYear', 'averageScore',
-             'description', 'cachedAt'])
+             'description', 'cachedAt', 'format', 'prequelIds', 'sequelIds'])
         && request.resource.data.keys().hasAll(['id', 'title', 'genres', 'cachedAt'])
+        && (!('format' in request.resource.data) || request.resource.data.format is string)
+        && (!('prequelIds' in request.resource.data)
+            || (request.resource.data.prequelIds is list && request.resource.data.prequelIds.size() <= 50))
+        && (!('sequelIds' in request.resource.data)
+            || (request.resource.data.sequelIds is list && request.resource.data.sequelIds.size() <= 50))
         && request.resource.data.id is int
         && string(request.resource.data.id) == animeId
         && request.resource.data.title is string

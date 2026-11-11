@@ -48,24 +48,25 @@ fun RecommendationsScreen(
 ) {
     val progress by appVm.progress.collectAsStateWithLifecycle()
     val lists by appVm.lists.collectAsStateWithLifecycle()
-    val editableLists by appVm.editableLists.collectAsStateWithLifecycle()
     val animeMap by appVm.anime.collectAsStateWithLifecycle()
+    val franchises by appVm.franchises.collectAsStateWithLifecycle()
     val state by vm.state.collectAsStateWithLifecycle()
     var useLlm by rememberSaveable { mutableStateOf(false) }
     var addTarget by remember { mutableStateOf<Anime?>(null) }
 
     val profile = remember(progress) { RecommendationEngine.buildProfile(progress.values) }
     val topGenres = remember(profile) { RecommendationEngine.topGenres(profile, 3) }
-    // Non si consiglia ciò che è già in una lista o ha puntate viste.
-    val excluded = remember(progress, lists) { progress.keys + lists.flatMap { it.animeIds } }
+    // Non si consiglia ciò che è già in una lista o ha puntate viste, né le altre stagioni della stessa serie.
+    val known = remember(progress, lists) { progress.keys + lists.flatMap { it.animeIds } }
+    val excluded = remember(known, franchises) { known + known.flatMap { franchises[it]?.seasonIds.orEmpty() } }
 
     fun reload() {
         if (topGenres.isEmpty()) return
-        val titles = progress.keys.mapNotNull { animeMap[it]?.title }.take(10)
+        val titles = progress.keys.mapNotNull { animeMap[it]?.englishOrRomaji }.take(10)
         vm.load(progress.values, titles, excluded, useLlm)
     }
 
-    LaunchedEffect(progress.keys) { appVm.ensureAnime(progress.keys) }
+    LaunchedEffect(known) { appVm.ensureFranchises(known) }
     // Si ricalcola solo se cambiano i generi dominanti (o l'interruttore AI), non a ogni puntata:
     // ogni calcolo costa richieste ad AniList.
     LaunchedEffect(topGenres, useLlm) { reload() }
@@ -137,13 +138,6 @@ fun RecommendationsScreen(
     }
 
     addTarget?.let { anime ->
-        AddToListDialog(
-            anime = anime,
-            lists = editableLists,
-            onToggle = { list, add ->
-                if (add) appVm.addToList(list.id, anime) else appVm.removeFromList(list.id, anime.id)
-            },
-            onDismiss = { addTarget = null },
-        )
+        AddToListDialog(appVm, anime, onDismiss = { addTarget = null })
     }
 }

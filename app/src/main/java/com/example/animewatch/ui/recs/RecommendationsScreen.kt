@@ -25,7 +25,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,6 +50,7 @@ import com.example.animewatch.ui.components.AddToListSheet
 import com.example.animewatch.ui.components.AnimeRow
 import com.example.animewatch.ui.components.EmptyState
 import com.example.animewatch.ui.components.ScreenBar
+import com.example.animewatch.ui.components.SkeletonAnimeList
 import com.example.animewatch.ui.recs.RecommendationsViewModel.AiStatus
 import kotlin.math.roundToInt
 
@@ -142,7 +142,7 @@ fun RecommendationsScreen(
             // Mentre si ricalcola resta l'elenco di prima, sbiadito: l'attesa la mostra già l'anello sul pulsante Gemini.
             val listAlpha by animateFloatAsState(if (state.loading) 0.4f else 1f, label = "listAlpha")
             when {
-                state.loading && visible.isEmpty() -> CircularProgressIndicator(Modifier.padding(24.dp))
+                state.loading && visible.isEmpty() -> SkeletonAnimeList(Modifier.padding(horizontal = 16.dp))
                 state.error != null -> EmptyState(state.error.orEmpty())
                 visible.isEmpty() -> EmptyState("Nessun consiglio al momento.")
                 else -> LazyColumn(

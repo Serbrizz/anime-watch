@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,7 +20,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -45,6 +45,7 @@ import com.example.animewatch.data.model.Franchise
 import com.example.animewatch.data.model.ListRole
 import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.EmptyState
+import com.example.animewatch.ui.components.skeleton
 import com.example.animewatch.ui.components.ScreenBar
 import com.example.animewatch.ui.components.roleLabel
 
@@ -74,8 +75,13 @@ fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
         },
     ) { padding ->
         if (!listsLoaded) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+            Column(
+                Modifier.padding(padding).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                repeat(3) {
+                    Box(Modifier.fillMaxWidth().height(96.dp).skeleton(MaterialTheme.shapes.medium))
+                }
             }
         } else if (lists.isEmpty()) {
             EmptyState(
@@ -109,8 +115,7 @@ fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
                                     val color = MaterialTheme.colorScheme.onSurfaceVariant
                                     Text("${groups.size} anime · ", style = style, color = color)
                                     if (loading) {
-                                        CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                                        Text(" stagioni viste", style = style, color = color)
+                                        Box(Modifier.size(width = 110.dp, height = 14.dp).skeleton())
                                     } else {
                                         Text("$seen stagioni viste", style = style, color = color)
                                     }

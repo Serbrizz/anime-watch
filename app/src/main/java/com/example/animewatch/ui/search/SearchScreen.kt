@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,6 +39,7 @@ import com.example.animewatch.ui.components.AnimeRow
 import com.example.animewatch.ui.components.EmptyState
 import com.example.animewatch.ui.components.InListIcon
 import com.example.animewatch.ui.components.ScreenBar
+import com.example.animewatch.ui.components.SkeletonAnimeList
 
 /**
  * Ricerca nel catalogo. Aperta da una lista ([targetListId], pulsante "Aggiungi anime") il "+" mette la serie
@@ -91,7 +91,7 @@ fun SearchScreen(
                 singleLine = true,
             )
             when {
-                state.loading -> CircularProgressIndicator(Modifier.padding(24.dp))
+                state.loading -> SkeletonAnimeList(Modifier.padding(horizontal = 16.dp))
                 state.error != null -> EmptyState(state.error.orEmpty())
                 state.searched && state.results.isEmpty() -> EmptyState("Nessun risultato.")
                 state.results.isEmpty() -> EmptyState(

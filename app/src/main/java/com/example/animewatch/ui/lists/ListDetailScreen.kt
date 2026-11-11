@@ -30,6 +30,7 @@ import com.example.animewatch.data.model.Franchise
 import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.AnimeRow
 import com.example.animewatch.ui.components.EmptyState
+import com.example.animewatch.ui.components.SkeletonAnimeRow
 import com.example.animewatch.ui.components.ScreenBar
 
 /**
@@ -163,11 +164,7 @@ fun ListDetailScreen(
                 items(groups, key = { it.rootId }) { franchise ->
                     val seasons = franchise.seasonIds.mapNotNull { animeMap[it] }
                     if (seasons.isEmpty()) {
-                        Text(
-                            "Caricamento…",
-                            Modifier.padding(vertical = 24.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        SkeletonAnimeRow()
                     } else {
                         FranchiseRow(
                             seasons = seasons,

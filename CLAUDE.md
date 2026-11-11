@@ -115,6 +115,7 @@ app/src/main/java/com/example/animewatch/
    ├─ AppViewModel.kt          utente, liste, inviti, progressi, cache schede, azioni
    ├─ ErrorMessages.kt         testi d'errore per l'utente secondo AppErrors; il dettaglio va ad AppLog
    ├─ components/Common.kt     AnimeRow, CoverImage, UserAvatar, EmptyState, etichette
+   ├─ components/Skeleton.kt   skeleton di attesa: forma pulsante, righe di testo, righe di anime
    ├─ components/AddToListSheet.kt  pannello dal basso "Aggiungi a una lista" (anche crea una lista con l'anime dentro)
    ├─ components/ScreenBar.kt  titolo e azioni che ogni schermata dichiara per la barra in alto comune
    ├─ login/  lists/  invites/  detail/  search/  recs/  profile/   una cartella per schermata
@@ -139,7 +140,7 @@ importare nulla di Android (resta testabile sulla JVM).
 | — (login) | Fuori dal NavHost: logo, pulsante "Accedi con Google", errore. Compare finché non c'è un utente |
 | — (barra in alto) | Una sola, in `AnimeWatchRoot`: titolo e azioni dalla schermata (`ScreenBar`), freccia indietro fuori dalle sezioni della barra in basso, foto del profilo a destra tranne che nelle pagine `profile…` |
 | — (barra in basso) | Liste, Cerca, Consigliati su ogni schermata tranne le pagine `profile…`. È accesa la sezione da cui si è arrivati (l'ultima radice nello stack); ogni sezione conserva il proprio stack, e ritoccare quella attiva riporta alla sua radice |
-| `lists` | Indicatore di attesa finché non arriva la prima lettura delle liste (il messaggio "Nessuna lista" solo dopo). Elenco liste (n. anime, n. stagioni viste, contrassegno "Condivisa"; al posto del numero di stagioni viste un indicatore di attesa finché le serie della lista non sono tutte ricostruite o fallite), FAB "nuova lista", elimina (proprietario) o esci (altri) con conferma |
+| `lists` | Skeleton finché non arriva la prima lettura delle liste (il messaggio "Nessuna lista" solo dopo). Elenco liste (n. anime, n. stagioni viste, contrassegno "Condivisa"; al posto del numero di stagioni viste uno skeleton finché le serie della lista non sono tutte ricostruite o fallite), FAB "nuova lista", elimina (proprietario) o esci (altri) con conferma |
 | `profile` | Foto, nome, email; "Inviti" (quanti in attesa), "Aggiornamenti" (versione installata, "Aggiorna" se ce n'è una nuova), "Esci dall'account" con conferma |
 | `profile/updates` | Versione installata e nuova; "Aggiorna alla versione X" (apre il popup) oppure "Verifica aggiornamenti" |
 | — (aggiornamento) | Popup fuori dal NavHost, anche sul login: versione nuova, note della release, avanzamento del download; "Aggiorna ora" / "Più tardi" |
@@ -148,9 +149,9 @@ importare nulla di Android (resta testabile sulla JVM).
 | `list/{listId}/search` | La ricerca di `search` legata alla lista (titolo "Aggiungi a …", tastiera aperta all'arrivo): il "+" aggiunge la serie alla lista e diventa una spunta che la toglie. Se la lista sparisce o non è più modificabile torna la ricerca normale |
 | `profile/invites` | Inviti ricevuti: lista, chi invita, ruolo; "Accetta" / "Rifiuta" |
 | `anime/{animeId}` | Copertina, generi, trama, "Aggiungi a una lista" (aggiunge la serie), sotto il menu a tendina "Stagione" (se più d'una: etichetta, titolo, spunta sulle viste; c'è da subito se la scheda ha prequel/sequel e, finché le stagioni caricano, mostra il titolo di quella aperta e un indicatore di attesa), griglia di chip per puntata, "Segna tutte"/"Azzera" |
-| `search` | Campo di ricerca, una riga per serie dalla più popolare (la sua stagione più popolare fra i risultati) con "+" per aggiungere a una lista; sopra, l'avviso se si è cercato senza l'ultima parola |
+| `search` | Campo di ricerca, skeleton dei risultati durante la ricerca, una riga per serie dalla più popolare (la sua stagione più popolare fra i risultati) con "+" per aggiungere a una lista; sopra, l'avviso se si è cercato senza l'ultima parola |
 | — (pannello "Aggiungi a una lista") | Dal "+" di Cerca e Consigliati e dal pulsante della scheda: copertina e titolo, una scheda per lista modificabile da accendere/spegnere (vale per la serie), "Nuova lista con questo anime", "Fatto" |
-| `recs` | Solo se il proxy è configurato, un'intestazione di altezza fissa (nulla si sposta quando il pulsante cambia forma) col pulsante "Affina con Gemini" e il suo logo a destra, disattivato con "Gemini non è disponibile al momento" se il preflight dice no. Acceso si riduce a un cerchio col logo, con un anello mentre l'AI lavora e, a riordino fatto, logo verde e spunta animata; ritoccato torna l'elenco dell'algoritmo. Se l'algoritmo fallisce o non trova candidati torna aperto (ritoccarlo riprova). Elenco con affinità % e motivo, con la stella di Gemini davanti all'affinità se l'ha data l'AI; mentre si ricalcola resta quello di prima, sbiadito. I generi dominanti non si mostrano |
+| `recs` | Solo se il proxy è configurato, un'intestazione di altezza fissa (nulla si sposta quando il pulsante cambia forma) col pulsante "Affina con Gemini" e il suo logo a destra, disattivato con "Gemini non è disponibile al momento" se il preflight dice no. Acceso si riduce a un cerchio col logo, con un anello mentre l'AI lavora e, a riordino fatto, logo verde e spunta animata; ritoccato torna l'elenco dell'algoritmo. Se l'algoritmo fallisce o non trova candidati torna aperto (ritoccarlo riprova). Skeleton al primo calcolo; poi elenco con affinità % e motivo, con la stella di Gemini davanti all'affinità se l'ha data l'AI; mentre si ricalcola resta quello di prima, sbiadito. I generi dominanti non si mostrano |
 
 Titoli degli anime ovunque in inglese, se AniList lo conosce, altrimenti in romaji (`Anime.englishOrRomaji`); nella
 scheda il romaji compare sotto come sottotitolo. La ricerca resta su entrambi.
@@ -442,6 +443,8 @@ poteri e limiti del proprietario, eliminazione, migrazione). Il test non è nel 
 
 - Kotlin ufficiale (`kotlin.code.style=official`), 4 spazi, righe ragionevoli (~120).
 - Nessuna logica di business nei composable: azioni nei ViewModel, regole di dominio in `data/model` o `domain`.
+- Un contenuto che sta arrivando si aspetta con uno skeleton (`ui/components/Skeleton.kt`) delle sue misure, così la pagina
+  non si sposta; gli indicatori rotondi e le barre restano per le azioni e gli avanzamenti (pulsanti, Gemini, download).
 - Gli stati sono `StateFlow` immutabili; le schermate usano `collectAsStateWithLifecycle()`.
 - Mai mostrare all'utente il messaggio di un'eccezione (tecnico e in inglese): i testi d'errore vengono da
   `ui/ErrorMessages.kt`, che dice cosa è successo e cosa fare e lascia il dettaglio a log e Crashlytics.

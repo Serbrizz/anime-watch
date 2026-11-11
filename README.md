@@ -16,16 +16,16 @@ Il progetto Firebase esiste già e tutti firmano gli APK con **lo stesso keystor
 Chiedi in privato a chi gestisce le release:
 
 - il **keystore** condiviso (da tenere fuori dal repo);
-- `google-services.json`, che puoi anche scaricare dalla console Firebase se hai accesso al progetto;
-- la **chiave OpenRouter**, che serve solo per fare le release.
+- `google-services.json`, che puoi anche scaricare dalla console Firebase se hai accesso al progetto.
+
+Non serve nessuna chiave OpenRouter: l'app passa da un proxy (`proxy/`, Cloudflare Worker) che la custodisce.
 
 Poi:
 
 1. Copia `keystore.properties.example` in `keystore.properties` e indica il percorso del keystore (con `/`).
    Senza questo file, o con un altro keystore, la build si ferma con un messaggio che spiega cosa manca.
 2. Metti `google-services.json` in `app/`.
-3. Copia `local.properties.example` in `local.properties`. Se fai release, inserisci anche `OPENROUTER_API_KEY`.
-4. Apri la cartella in Android Studio (JDK 17 o successivo) e premi Run. Da terminale: `.\gradlew.bat :app:assembleDebug`,
+3. Apri la cartella in Android Studio (JDK 17 o successivo) e premi Run. Da terminale: `.\gradlew.bat :app:assembleDebug`,
    oppure `.\install.ps1` per aggiornare il codice, compilare e installare sul telefono collegato.
 
 Si lavora su `dev`; `main` riceve solo i merge per le release (CLAUDE.md §12).
@@ -44,3 +44,9 @@ Lo script controlla la configurazione e apre il Blocco note per le note di rilas
 Poi incrementa la versione, lancia i test, compila e firma l'APK, chiede conferma, fa commit, tag e push, pubblica la
 release su GitHub e riporta `dev` alla release. Se qualcosa va storto prima del commit rimette tutto com'era.
 Dettagli in CLAUDE.md §13.
+
+## Proxy AI
+
+Il riordino AI dei consigliati passa dal Worker in `proxy/`, che verifica l'utente e aggiunge la chiave OpenRouter.
+Si modifica e si pubblica da `proxy/` con `npm install`, `npx wrangler login` e `npm run deploy` (CLAUDE.md §8).
+Serve solo per cambiare il proxy; per lavorare sull'app non serve.

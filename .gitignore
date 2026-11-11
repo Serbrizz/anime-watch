@@ -19,3 +19,7 @@ app/google-services.json
 # Sistema
 .DS_Store
 Thumbs.db
+
+# Proxy AI (Cloudflare Worker)
+proxy/node_modules/
+proxy/.wrangler/

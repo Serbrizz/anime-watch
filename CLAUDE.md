@@ -44,7 +44,8 @@ liste condivise (commenti, profili pubblici), tracciamento dei voti personali, t
 | Backend utente | Firebase Auth (solo Google) + Cloud Firestore + Crashlytics | BoM 33.4.0, plugin Crashlytics 3.0.2 |
 | Accesso Google | Credential Manager (`androidx.credentials`) + Google ID | 1.3.0 / 1.1.1 |
 | Dati anime | AniList GraphQL, `https://graphql.anilist.co/` | pubblico, senza chiave |
-| LLM (opzionale) | OpenRouter, `https://openrouter.ai/api/v1/` | chiave in `local.properties` |
+| LLM (opzionale) | OpenRouter, raggiunto tramite il proxy | — |
+| Proxy AI | Cloudflare Worker (`proxy/`, JavaScript), custodisce la chiave OpenRouter | Wrangler 4.160.0 |
 | Rete | Retrofit + OkHttp + kotlinx.serialization | 2.11.0 / 4.12.0 / 1.7.3 |
 | Immagini | Coil | 2.7.0 |
 | Build | Gradle 8.9, AGP 8.5.2, version catalog | JDK 17 |
@@ -63,6 +64,11 @@ rate limit stretto, non ufficiale) e Kitsu. AniList è stato scelto perché: nes
 affidabili, numero puntate e prossima puntata in corso, copertine, ricerca per titolo.
 Firestore fa da **cache condivisa** davanti ad AniList (§5), così si fa una sola chiamata esterna per anime per tutti gli utenti.
 
+### Perché un proxy su Cloudflare
+Una chiave dentro l'APK si estrae sempre: decompilando l'app o leggendo la richiesta. Le release sono pubbliche, quindi
+la chiave OpenRouter sta solo nel Worker, come segreto. Cloudflare e non una Cloud Function perché i Workers sono gratuiti
+senza carta, mentre le Functions richiedono il piano Blaze di Firebase.
+
 ## 3. Struttura del codice
 
 ```
@@ -79,7 +85,7 @@ app/src/main/java/com/example/animewatch/
 │  ├─ firebase/Mappers.kt      modelli <-> documenti Firestore
 │  ├─ remote/
 │  │  ├─ anilist/              AniListApi (1 endpoint POST), AniListClient (query), DTO
-│  │  └─ openrouter/           OpenRouterApi (chat/completions)
+│  │  └─ openrouter/           OpenRouterApi (chat/completions, tramite il proxy)
 │  └─ update/                  AppUpdater (release GitHub, download, installer), GitHubApi, AppVersion (puro, testato)
 ├─ domain/
 │  ├─ RecommendationEngine     profilo generi + coseno (puro, testato)
@@ -92,6 +98,12 @@ app/src/main/java/com/example/animewatch/
    ├─ login/  lists/  invites/  detail/  search/  recs/   una cartella per schermata
    ├─ update/                  UpdateViewModel (quando controllare, popup una volta per versione), UpdateDialog
    └─ theme/Theme.kt
+
+proxy/                          Cloudflare Worker "animewatch-ai" (fuori dall'app, deploy con wrangler)
+├─ src/index.js                 POST /chat/completions: token Firebase, limite per utente, modello fisso, inoltro a OpenRouter
+├─ src/firebase-auth.js         verifica degli ID token Firebase (firma RS256 con le chiavi di Google, aud/iss/exp/sub)
+├─ test/                        node --test sulla verifica del token
+└─ wrangler.toml                nome, variabili (progetto Firebase, modello, max token), limite di richieste
 ```
 
 Dipendenze ammesse: `ui -> domain/data`, `domain -> data`, `data` non conosce `ui`. `RecommendationEngine` non deve
@@ -173,8 +185,14 @@ in `lists/` con lo stesso ID e cancella le vecchie; quando non ce ne sono più, 
 `search` (`media(search:…, sort: SEARCH_MATCH)`), `byIds` (`id_in`, max 50), `popularByGenre` (`genre:…`, `POPULARITY_DESC`, formati TV/MOVIE/OVA/ONA).
 Sempre `isAdult: false` dove si cerca. Limite ~90 richieste/minuto: le chiamate sono ridotte da cache e debounce.
 
-**OpenRouter** — `POST chat/completions`, header `Authorization: Bearer <chiave>`. Il modello è in `OPENROUTER_MODEL`
-(default `openai/gpt-4o-mini`; gli ID modello cambiano nel tempo, verificarli su openrouter.ai/models).
+**OpenRouter, tramite il proxy** — l'app fa `POST <aiProxyUrl>chat/completions` con header
+`Authorization: Bearer <ID token Firebase dell'utente>` e corpo `{messages, temperature}`. Il Worker:
+1. verifica il token (progetto `FIREBASE_PROJECT_ID`) e risponde 401 se non è valido;
+2. applica il limite di 10 richieste al minuto per uid (429);
+3. accetta al massimo 10 messaggi e 64 KB;
+4. fissa `model` (`OPENROUTER_MODEL`, oggi `openai/gpt-4o-mini`: gli ID cambiano nel tempo, verificarli su
+   openrouter.ai/models) e `max_tokens`;
+5. aggiunge la chiave (segreto `OPENROUTER_API_KEY`) e restituisce la risposta di OpenRouter così com'è.
 Il modello riceve una **lista chiusa** di 30 candidati reali e deve restituire un array JSON `[{id, reason}]`:
 non può inventare titoli. Ogni anomalia (rete, JSON non valido, ID sconosciuti) => `null` => si usa l'algoritmo.
 
@@ -191,7 +209,7 @@ per IP; l'app ne fa una ogni 6 ore): funziona solo se il repository è **pubblic
 3. **Punteggio.** `0,75 · coseno(generi del candidato, profilo) + 0,25 · voto medio/100`. Il coseno misura quanto i generi
    del candidato puntano nella stessa direzione dei gusti dell'utente e non premia chi ha molti generi né chi ha guardato molto.
    Candidati senza alcun genere in comune scartati; già in lista o con progresso esclusi.
-4. **Riordino AI (opzionale).** I primi 30 vanno a OpenRouter, che ne sceglie 12 con motivazione; senza chiave o in errore si mostrano i primi 20 dell'algoritmo.
+4. **Riordino AI (opzionale).** I primi 30 vanno a OpenRouter, che ne sceglie 12 con motivazione; senza proxy configurato o in errore si mostrano i primi 20 dell'algoritmo.
 5. **Quando si ricalcola.** All'apertura, al tocco su "Aggiorna", e solo se cambiano i 3 generi dominanti o l'interruttore AI
    (non a ogni puntata segnata: ogni calcolo costa richieste ad AniList).
 
@@ -223,12 +241,20 @@ release che si installa sopra le precedenti (Android accetta un aggiornamento so
 manca o se lo SHA-1 è diverso. La CI fa eccezione: compila senza segreti e non distribuisce nulla. La firma **non deve
 cambiare mai**. Dà accesso anche a tutto ciò che è firmato con lo stesso keystore: va condiviso solo con chi fa le release.
 
-### OpenRouter
-Copia `local.properties.example` in `local.properties` e imposta `OPENROUTER_API_KEY` (e se vuoi `OPENROUTER_MODEL`).
-Senza chiave l'interruttore AI non compare: per lo sviluppo è opzionale. Le **release** invece includono la chiave
-condivisa: `verifyReleaseConfig` controlla che il suo SHA-256 sia `openRouterKeySha256` di `gradle.properties` (nel
-repo c'è solo l'impronta, mai la chiave). Se la chiave si cambia, va aggiornata l'impronta. La chiave finisce in
-`BuildConfig`: **non committare mai `local.properties`**.
+### Proxy AI (Cloudflare Worker)
+L'app non ha bisogno di nessuna chiave. Conosce solo l'indirizzo del Worker, `aiProxyUrl` in `gradle.properties`: se è
+vuoto l'interruttore AI non compare. Il Worker `animewatch-ai` è sull'account Cloudflare di chi lo gestisce; per
+modificarlo serve l'accesso a quell'account, che Cloudflare permette di condividere invitando membri. Da `proxy/`:
+```
+npm install                                  # una volta: wrangler alla versione fissata
+npm test                                     # test della verifica del token
+npx wrangler login                           # una volta per PC (apre il browser)
+npm run deploy                               # pubblica; stampa l'URL da mettere in aiProxyUrl
+npx wrangler secret put OPENROUTER_API_KEY   # la chiave, solo la prima volta o quando cambia
+npm run logs                                 # log in tempo reale (401, 429, errori di OpenRouter)
+```
+Modello, `max_tokens` e limite di richieste stanno in `proxy/wrangler.toml`. Cambiarli non richiede una nuova
+versione dell'app, basta un deploy.
 
 ### Build e test
 ```
@@ -243,9 +269,9 @@ Android Studio (Koala o successivo) apre la cartella e fa tutto da solo. La CI (
 
 ## 9. Sicurezza e limiti noti
 
-- **Chiave OpenRouter nell'APK.** Le release la includono e sono scaricabili da chiunque dalla pagina GitHub: chi decompila
-  l'APK può estrarla. Per questo serve un limite di spesa su OpenRouter. Per toglierla dall'APK la chiamata deve passare
-  da un proxy (Cloud Function) che custodisce la chiave.
+- **Proxy AI.** La chiave OpenRouter non è nell'APK. L'URL del Worker è pubblico, ma risponde solo a chi ha un ID token
+  del progetto Firebase. Chiunque abbia un account Google può però accedere all'app e quindi usare il proxy, entro
+  10 richieste al minuto. Il tetto vero alla spesa resta il **limite di credito sulla chiave** in OpenRouter.
 - **Aggiornamenti.** Il repository delle release deve essere pubblico (§6). L'APK scaricato è verificato con dimensione e
   sha256 di GitHub; Android stesso rifiuta un APK con firma diversa o `versionCode` non maggiore.
 - **Cache `anime/` scrivibile dai client.** Le regole limitano forma e tipi ma un utente malevolo potrebbe scrivere dati falsi
@@ -275,11 +301,14 @@ Verificato (10/11/2026):
 Verificato (11/11/2026):
 - `assembleRelease` firma con il keystore condiviso (SHA-1 controllato con apksigner); `versionCode`/`versionName` arrivano da `appVersion`.
 - `verifySigningKey` ferma la build con un keystore diverso o senza `keystore.properties`.
+- Proxy pubblicato: risponde 401 senza token o con token falsi o firmati da chiavi sconosciute, 405 ai GET e 404 agli
+  altri percorsi. `npm test` copre la verifica del token (firma, aud, iss, scadenza, uid). L'APK non contiene `sk-or-`.
 
 Da verificare:
 1. Su dispositivo, con due account Google: invito, accettazione, rifiuto, sola visualizzazione, uscita, modalità aereo.
 2. Aggiornamento completo (popup, download, permesso "installa app sconosciute", installazione): possibile solo con il
    repository pubblico e almeno due release.
+3. "Affina con AI" su dispositivo, con un utente vero che passa dal proxy fino a OpenRouter.
 
 Le regole di `lists/` e `invites/` sono provate nell'emulatore Firestore con `@firebase/rules-unit-testing`
 (66 casi: creazione, lettura, inviti, ingresso con ruolo giusto e sbagliato, editor, viewer, rifiuto, ritiro,
@@ -307,8 +336,8 @@ poteri e limiti del proprietario, eliminazione, migrazione). Il test non è nel 
 - **Versione:** unica fonte `appVersion` in `gradle.properties`. `versionName` è `appVersion`, `versionCode` è
   `major·10000 + minor·100 + patch` (minor e patch sotto 100). La incrementa solo lo script.
 - **Pubblicare** (Windows, da `main` dopo il merge di `dev`): `.\release.cmd patch|minor|major`. Lo script lo lancia chi
-  fa la release, non Claude. Richiede `keystore.properties`, il vero `app/google-services.json`, la chiave OpenRouter
-  condivisa in `local.properties` e GitHub CLI autenticata con permesso di push (`gh auth login`).
+  fa la release, non Claude. Richiede `keystore.properties`, il vero `app/google-services.json` e GitHub CLI
+  autenticata con permesso di push (`gh auth login`).
   1. Controlla branch pulito e allineato a origin, `dev` già unito, tag libero e `:app:verifyReleaseConfig`.
      Poi apre il Blocco note per le note di rilascio, che compaiono nel popup dell'app.
   2. Incrementa `appVersion`.

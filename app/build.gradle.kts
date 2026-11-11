@@ -11,13 +11,6 @@ plugins {
     alias(libs.plugins.firebase.crashlytics)
 }
 
-// Chiavi opzionali lette da local.properties (mai committato). Vedi local.properties.example.
-val localProps = Properties().apply {
-    val f = rootProject.file("local.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
-}
-val openRouterKey: String = localProps.getProperty("OPENROUTER_API_KEY", "").trim()
-
 // Versione: unica fonte in gradle.properties (appVersion), incrementata da release.ps1.
 // versionCode deve crescere a ogni release, altrimenti Android rifiuta l'aggiornamento.
 val appVersion: String = providers.gradleProperty("appVersion").get()
@@ -49,8 +42,8 @@ android {
         versionCode = appVersionCode
         versionName = appVersion
 
-        buildConfigField("String", "OPENROUTER_API_KEY", "\"$openRouterKey\"")
-        buildConfigField("String", "OPENROUTER_MODEL", "\"${localProps.getProperty("OPENROUTER_MODEL", "openai/gpt-4o-mini")}\"")
+        // Proxy AI (Cloudflare Worker in proxy/): custodisce la chiave OpenRouter, l'app non la conosce.
+        buildConfigField("String", "AI_PROXY_URL", "\"${providers.gradleProperty("aiProxyUrl").getOrElse("")}\"")
         buildConfigField("String", "UPDATE_REPO", "\"${providers.gradleProperty("appReleaseRepo").get()}\"")
     }
 
@@ -127,7 +120,6 @@ fun fingerprint(algorithm: String, bytes: ByteArray, separator: String = ""): St
     MessageDigest.getInstance(algorithm).digest(bytes).joinToString(separator) { "%02X".format(it) }
 
 val expectedSigningSha1: String = providers.gradleProperty("appSigningSha1").get()
-val expectedOpenRouterSha256: String = providers.gradleProperty("openRouterKeySha256").getOrElse("").trim()
 val googleServicesFile: File = file("google-services.json")
 val runningInCi = System.getenv("CI") == "true"
 
@@ -166,11 +158,10 @@ val verifySigningKey by tasks.registering {
     }
 }
 
-// Una release si pubblica a tutti: deve avere il vero google-services.json e la chiave OpenRouter unica
-// (ne è fissata solo l'impronta, la chiave resta in local.properties).
+// Una release si pubblica a tutti: deve avere il keystore condiviso e il vero google-services.json.
 val verifyReleaseConfig by tasks.registering {
     group = "verification"
-    description = "Controlla keystore, google-services.json e chiave OpenRouter prima di una release."
+    description = "Controlla keystore e google-services.json prima di una release."
     dependsOn(verifySigningKey)
     doLast {
         if (keystoreFile == null) throw GradleException("Una release va firmata con il keystore condiviso: manca keystore.properties.")
@@ -179,22 +170,6 @@ val verifyReleaseConfig by tasks.registering {
         if ("EXAMPLE" in services || Regex(""""oauth_client"\s*:\s*\[\s*]""").containsMatchIn(services)) {
             throw GradleException(
                 "app/google-services.json è il segnaposto o non ha il client OAuth: scarica quello vero dalla console Firebase."
-            )
-        }
-        if (openRouterKey.isEmpty()) {
-            throw GradleException("Manca OPENROUTER_API_KEY in local.properties: le release includono la chiave OpenRouter condivisa.")
-        }
-        val keySha256 = fingerprint("SHA-256", openRouterKey.toByteArray()).lowercase()
-        if (expectedOpenRouterSha256.isEmpty()) {
-            throw GradleException(
-                "openRouterKeySha256 è vuota in gradle.properties. Se la chiave in local.properties è quella giusta, " +
-                    "fissala impostando openRouterKeySha256=$keySha256 (in un commit su dev)."
-            )
-        }
-        if (keySha256 != expectedOpenRouterSha256.lowercase()) {
-            throw GradleException(
-                "La chiave OpenRouter in local.properties non è quella delle release (impronta $keySha256, " +
-                    "attesa $expectedOpenRouterSha256): chiedi la chiave condivisa."
             )
         }
     }

@@ -1,7 +1,0 @@
-# Copia in local.properties (NON committarlo: è già nel .gitignore).
-# Android Studio aggiunge da solo sdk.dir.
-
-# Opzionale: abilita il riordino AI dei consigliati via OpenRouter.
-# Senza chiave l'app usa solo l'algoritmo sui generi.
-OPENROUTER_API_KEY=
-OPENROUTER_MODEL=openai/gpt-4o-mini

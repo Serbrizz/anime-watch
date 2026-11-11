@@ -13,10 +13,7 @@ import kotlinx.serialization.json.Json
  * Il modello vede SOLO una lista chiusa di candidati reali (ID AniList): non può inventare
  * titoli, può solo scegliere e motivare. Qualsiasi errore => null e l'app usa l'algoritmo.
  */
-class LlmReranker(
-    private val api: OpenRouterApi?,
-    private val model: String,
-) {
+class LlmReranker(private val api: OpenRouterApi?) {
     val isAvailable: Boolean get() = api != null
 
     @Serializable
@@ -33,7 +30,6 @@ class LlmReranker(
         return try {
             val response = api.chat(
                 ChatRequest(
-                    model = model,
                     messages = listOf(
                         ChatMessage("system", SYSTEM_PROMPT),
                         ChatMessage("user", buildPrompt(topGenres, watchedTitles, candidates, limit)),

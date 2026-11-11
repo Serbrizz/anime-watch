@@ -5,7 +5,7 @@
     Si ferma al primo problema, dice in quale passo e perché, e non esegue i passi successivi.
     Il pull è solo fast-forward: se il branch locale e quello remoto hanno commit diversi non fa merge, si ferma.
 .PARAMETER Release
-    Compila la variante release (servono il vero google-services.json e la chiave OpenRouter delle release).
+    Compila la variante release (serve il vero google-services.json).
     Senza, compila la debug: ha la stessa firma, quindi si installa anche sopra una versione pubblicata.
 .PARAMETER Serial
     Il dispositivo su cui installare, come compare in `adb devices`. Serve solo se ne sono collegati più di uno.

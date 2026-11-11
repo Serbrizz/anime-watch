@@ -7,7 +7,7 @@
 
     1. controlli: branch main pulito e allineato a origin, dev già unito, tag libero,
        configurazione per la release (Gradle :app:verifyReleaseConfig: keystore
-       condiviso, google-services.json vero, chiave OpenRouter unica) e GitHub CLI.
+       condiviso e google-services.json vero) e GitHub CLI.
        Con gh pronta apre nel Blocco note un file temporaneo vuoto in cui scrivere le
        note di rilascio (compaiono nel popup di aggiornamento dell'app): letto il
        testo, il file si elimina
@@ -388,7 +388,7 @@ try {
     Detail 'Controllo della configurazione per la release (Gradle)...'
     & $gradlew -q :app:verifyReleaseConfig
     if ($LASTEXITCODE -ne 0) { throw 'Configurazione per la release incompleta: vedi l''errore di Gradle qui sopra.' }
-    Ok 'Keystore condiviso, google-services.json e chiave OpenRouter'
+    Ok 'Keystore condiviso e google-services.json'
 
     if (Get-Command gh -ErrorAction SilentlyContinue) {
         gh auth status --hostname github.com *> $null

@@ -13,6 +13,7 @@ import com.example.animewatch.data.update.AppUpdater
 import com.example.animewatch.data.update.GitHubApi
 import com.example.animewatch.domain.LlmReranker
 import com.example.animewatch.domain.RecommendationService
+import com.google.android.gms.tasks.Tasks
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
@@ -41,22 +42,29 @@ class AppContainer(context: Context) {
         .build()
         .create(AniListApi::class.java)
 
-    /** null se la chiave non è configurata: il riordino AI resta semplicemente spento. */
+    private val firebaseAuth = FirebaseAuth.getInstance()
+
+    /**
+     * OpenRouter passando dal proxy (proxy/, Cloudflare Worker), che aggiunge la chiave: l'app si presenta con l'ID
+     * token Firebase dell'utente. null se il proxy non è configurato: il riordino AI resta semplicemente spento.
+     */
     private val openRouterApi: OpenRouterApi? =
-        BuildConfig.OPENROUTER_API_KEY.takeIf { it.isNotBlank() }?.let { key ->
+        BuildConfig.AI_PROXY_URL.takeIf { it.isNotBlank() }?.let { proxyUrl ->
             val client = OkHttpClient.Builder()
                 .addInterceptor { chain ->
-                    chain.proceed(
-                        chain.request().newBuilder()
-                            .header("Authorization", "Bearer $key")
-                            .header("X-Title", "AnimeWatch")
-                            .build()
-                    )
+                    // Gli interceptor girano su un thread di OkHttp: si può attendere il token (rinnovato se scaduto).
+                    // Senza utente si parte senza token: il proxy risponde 401 e si usa l'algoritmo.
+                    val token = firebaseAuth.currentUser?.let { user ->
+                        runCatching { Tasks.await(user.getIdToken(false), 15, TimeUnit.SECONDS).token }.getOrNull()
+                    }
+                    val request = chain.request().newBuilder()
+                    if (token != null) request.header("Authorization", "Bearer $token")
+                    chain.proceed(request.build())
                 }
                 .callTimeout(60, TimeUnit.SECONDS)
                 .build()
             Retrofit.Builder()
-                .baseUrl("https://openrouter.ai/api/v1/")
+                .baseUrl(proxyUrl)
                 .client(client)
                 .addConverterFactory(json.asConverterFactory(jsonMediaType))
                 .build()
@@ -91,13 +99,13 @@ class AppContainer(context: Context) {
     private val aniListClient = AniListClient(aniListApi)
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance()
 
-    val auth = AuthDataSource(FirebaseAuth.getInstance(), context.applicationContext)
+    val auth = AuthDataSource(firebaseAuth, context.applicationContext)
     val userData = UserDataSource(db)
     val listData = ListDataSource(db)
     val animeRepo = AnimeRepository(aniListClient, db)
     val recommender = RecommendationService(
         aniList = aniListClient,
         animeRepo = animeRepo,
-        reranker = LlmReranker(openRouterApi, BuildConfig.OPENROUTER_MODEL),
+        reranker = LlmReranker(openRouterApi),
     )
 }

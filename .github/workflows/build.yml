@@ -24,3 +24,10 @@ jobs:
         run: gradle :app:testDebugUnitTest
       - name: Build debug
         run: gradle :app:assembleDebug
+      # Verifica dei token del proxy AI: test senza dipendenze, basta Node.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test del proxy
+        working-directory: proxy
+        run: node --test

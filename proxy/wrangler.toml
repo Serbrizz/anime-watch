@@ -1,0 +1,22 @@
+# Proxy AI di AnimeWatch (Cloudflare Worker): vedi CLAUDE.md §6 e §8.
+# La chiave OpenRouter è un segreto, non sta qui: npx wrangler secret put OPENROUTER_API_KEY
+name = "animewatch-ai"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+preview_urls = false
+
+[vars]
+FIREBASE_PROJECT_ID = "anime-watch-873b9"
+# Gli ID modello cambiano nel tempo: verificarli su openrouter.ai/models.
+OPENROUTER_MODEL = "openai/gpt-4o-mini"
+MAX_TOKENS = "1500"
+
+# Richieste per utente (uid Firebase): un ricalcolo dei consigliati ne fa una.
+[[ratelimits]]
+name = "PER_USER"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
+
+[observability]
+enabled = true

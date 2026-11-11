@@ -125,6 +125,12 @@ data class AnimeList(
 
     /** Condivisa = c'è almeno un membro oltre al proprietario. */
     val isShared: Boolean get() = members.size > 1
+
+    /** La serie di [animeId] è nella lista se c'è una qualunque sua stagione; senza franchise noto vale la scheda. */
+    fun containsSeries(animeId: Int, franchises: Map<Int, Franchise>): Boolean {
+        val seasons = franchises[animeId]?.seasonIds ?: listOf(animeId)
+        return animeIds.any { it in seasons }
+    }
 }
 
 /**

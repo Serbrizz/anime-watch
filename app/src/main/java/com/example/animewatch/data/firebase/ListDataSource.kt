@@ -49,8 +49,9 @@ class ListDataSource(private val db: FirebaseFirestore) {
         awaitClose { registration.remove() }
     }
 
-    fun createList(owner: UserProfile, name: String) {
-        lists.document().set(newListMap(owner, name, createdAt = System.currentTimeMillis(), animeIds = emptyList()))
+    /** [animeIds] non è vuoto quando la lista nasce dal pannello "Aggiungi a una lista", con l'anime già dentro. */
+    fun createList(owner: UserProfile, name: String, animeIds: List<Int> = emptyList()) {
+        lists.document().set(newListMap(owner, name, createdAt = System.currentTimeMillis(), animeIds = animeIds))
             .logFailure("createList")
     }
 

@@ -51,7 +51,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.animewatch.data.model.Anime
 import com.example.animewatch.data.model.Franchise
 import com.example.animewatch.ui.AppViewModel
-import com.example.animewatch.ui.components.AddToListDialog
+import com.example.animewatch.ui.components.AddToListSheet
 import com.example.animewatch.ui.components.CoverImage
 import com.example.animewatch.ui.components.EmptyState
 import com.example.animewatch.ui.components.ScreenBar
@@ -67,7 +67,7 @@ fun AnimeDetailScreen(vm: AppViewModel, animeId: Int) {
     val anime = animeMap[selectedId]
     val seasons = (franchises[animeId]?.seasonIds ?: listOf(animeId)).mapNotNull { animeMap[it] }
     val labels = remember(seasons) { Franchise.seasonLabels(seasons) }
-    var showAddDialog by rememberSaveable { mutableStateOf(false) }
+    var showAddSheet by rememberSaveable { mutableStateOf(false) }
     var expanded by rememberSaveable(selectedId) { mutableStateOf(false) }
 
     LaunchedEffect(animeId) {
@@ -140,7 +140,7 @@ fun AnimeDetailScreen(vm: AppViewModel, animeId: Int) {
             }
 
             item(span = fullWidth) {
-                OutlinedButton(onClick = { showAddDialog = true }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { showAddSheet = true }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Text("  Aggiungi a una lista")
                 }
@@ -214,8 +214,8 @@ fun AnimeDetailScreen(vm: AppViewModel, animeId: Int) {
             }
         }
 
-        if (showAddDialog) {
-            AddToListDialog(vm, anime, onDismiss = { showAddDialog = false })
+        if (showAddSheet) {
+            AddToListSheet(vm, anime, onDismiss = { showAddSheet = false })
         }
     }
 }

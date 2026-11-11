@@ -6,9 +6,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -96,6 +98,7 @@ fun ListDetailScreen(
     listId: String,
     onOpenAnime: (Int) -> Unit,
     onOpenMembers: () -> Unit,
+    onAddAnime: () -> Unit,
 ) {
     val lists by vm.lists.collectAsStateWithLifecycle()
     val progress by vm.progress.collectAsStateWithLifecycle()
@@ -117,18 +120,29 @@ fun ListDetailScreen(
         }
     }
 
-    Scaffold { padding ->
+    Scaffold(
+        floatingActionButton = {
+            if (canEdit) {
+                ExtendedFloatingActionButton(
+                    onClick = onAddAnime,
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("Aggiungi anime") },
+                )
+            }
+        },
+    ) { padding ->
         when {
             // Succede anche quando il proprietario la elimina o ci rimuove mentre siamo qui.
             list == null -> EmptyState("Lista non trovata.", Modifier.padding(padding))
             list.animeIds.isEmpty() -> EmptyState(
-                if (canEdit) "Lista vuota. Cerca un anime e aggiungilo con il pulsante +."
+                if (canEdit) "Lista vuota. Tocca \"Aggiungi anime\" per cercarne uno e metterlo qui."
                 else "Lista vuota. Puoi solo visualizzarla: gli anime li aggiunge chi ha il permesso di modifica.",
                 Modifier.padding(padding),
             )
             else -> LazyColumn(
                 modifier = Modifier.padding(padding),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                // In fondo resta spazio per il pulsante "Aggiungi anime", che altrimenti coprirebbe l'ultima riga.
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
             ) {
                 if (!canEdit) {
                     item(key = "viewer") {

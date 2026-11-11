@@ -9,6 +9,8 @@ anime consigliati in base ai generi già guardati. Dati anime da AniList, dati u
 ## 1. Requisiti funzionali
 
 1. **Liste.** L'utente crea più liste con nome libero (es. "Da vedere in inverno"), vi aggiunge e toglie anime, le elimina.
+   Il "+" su un anime apre un pannello dal basso con le liste da spuntare e "Nuova lista", che la crea con l'anime già dentro.
+   Dentro una lista, "Aggiungi anime" apre la ricerca: ciò che si aggiunge finisce direttamente in quella lista.
 2. **Puntate.** Nella scheda di un anime ogni puntata è una chip che si segna/toglie come vista.
 3. **Stagioni.** In AniList ogni stagione è una scheda a sé (S1, S2… sono ID diversi), quindi *stagione* = *scheda anime*.
    Le schede collegate come prequel/sequel (film e OVA compresi) formano un **franchise**: nelle liste è un anime solo,
@@ -107,7 +109,8 @@ app/src/main/java/com/example/animewatch/
 └─ ui/
    ├─ AnimeWatchRoot.kt        login se non c'è utente, altrimenti NavHost + bottom bar + banner errori
    ├─ AppViewModel.kt          utente, liste, inviti, progressi, cache schede, azioni
-   ├─ components/Common.kt     AnimeRow, CoverImage, UserAvatar, AddToListDialog, EmptyState, etichette
+   ├─ components/Common.kt     AnimeRow, CoverImage, UserAvatar, EmptyState, etichette
+   ├─ components/AddToListSheet.kt  pannello dal basso "Aggiungi a una lista" (anche crea una lista con l'anime dentro)
    ├─ components/ScreenBar.kt  titolo e azioni che ogni schermata dichiara per la barra in alto comune
    ├─ login/  lists/  invites/  detail/  search/  recs/  profile/   una cartella per schermata
    ├─ update/                  UpdateViewModel (quando controllare, popup una volta per versione), UpdateDialog, UpdatesScreen
@@ -134,11 +137,13 @@ importare nulla di Android (resta testabile sulla JVM).
 | `profile` | Foto, nome, email; "Inviti" (quanti in attesa), "Aggiornamenti" (versione installata, "Aggiorna" se ce n'è una nuova), "Esci dall'account" con conferma |
 | `profile/updates` | Versione installata e nuova; "Aggiorna alla versione X" (apre il popup) oppure "Verifica aggiornamenti" |
 | — (aggiornamento) | Popup fuori dal NavHost, anche sul login: versione nuova, note della release, avanzamento del download; "Aggiorna ora" / "Più tardi" |
-| `list/{listId}` | Una riga per serie (copertina della S1): stagioni viste su totali, puntate e barra della stagione corrente, spunta se tutte viste; il tocco apre la stagione corrente; rimuovi (tutte le stagioni) solo con permesso di modifica; icona condivisione |
+| `list/{listId}` | Una riga per serie (copertina della S1): stagioni viste su totali, puntate e barra della stagione corrente, spunta se tutte viste; il tocco apre la stagione corrente; rimuovi (tutte le stagioni) e pulsante "Aggiungi anime" solo con permesso di modifica; icona condivisione |
 | `list/{listId}/members` | Membri con ruolo. Proprietario: invito per email + ruolo, inviti in attesa da ritirare, cambia ruolo / rimuovi membro. Altri: "Esci dalla lista" |
+| `list/{listId}/search` | La ricerca di `search` legata alla lista (titolo "Aggiungi a …", tastiera aperta all'arrivo): il "+" aggiunge la serie alla lista e diventa una spunta che la toglie. Se la lista sparisce o non è più modificabile torna la ricerca normale |
 | `profile/invites` | Inviti ricevuti: lista, chi invita, ruolo; "Accetta" / "Rifiuta" |
 | `anime/{animeId}` | Copertina, generi, trama, "Aggiungi a una lista" (aggiunge la serie), sotto il menu a tendina "Stagione" (se più d'una: etichetta, titolo, spunta sulle viste), griglia di chip per puntata, "Segna tutte"/"Azzera" |
 | `search` | Campo di ricerca, risultati con "+" per aggiungere a una lista |
+| — (pannello "Aggiungi a una lista") | Dal "+" di Cerca e Consigliati e dal pulsante della scheda: copertina e titolo, una scheda per lista modificabile da accendere/spegnere (vale per la serie), "Nuova lista con questo anime", "Fatto" |
 | `recs` | Generi dominanti, interruttore "Affina con AI" (solo se il proxy è configurato; disattivato con "Non disponibile al momento" se il preflight dice no), elenco con affinità % e motivo |
 
 Titoli degli anime ovunque in inglese, se AniList lo conosce, altrimenti in romaji (`Anime.englishOrRomaji`); nella

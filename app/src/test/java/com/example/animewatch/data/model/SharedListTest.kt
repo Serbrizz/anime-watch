@@ -36,6 +36,17 @@ class SharedListTest {
     }
 
     @Test
+    fun `una serie è nella lista se c'è una qualunque sua stagione`() {
+        val withS1 = list.copy(animeIds = listOf(1))
+        val franchises = mapOf(2 to Franchise(1, listOf(1, 2)))
+        assertTrue(withS1.containsSeries(1, franchises))
+        assertTrue(withS1.containsSeries(2, franchises))
+        // Senza franchise noto conta solo la scheda stessa.
+        assertFalse(withS1.containsSeries(2, emptyMap()))
+        assertFalse(withS1.containsSeries(3, franchises))
+    }
+
+    @Test
     fun `i ruoli si leggono dalle chiavi salvate su Firestore`() {
         assertEquals(ListRole.EDITOR, ListRole.fromKey("editor"))
         assertEquals(ListRole.VIEWER, ListRole.fromKey("viewer"))

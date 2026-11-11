@@ -36,7 +36,7 @@ import com.example.animewatch.data.model.Anime
 import com.example.animewatch.domain.LlmReranker
 import com.example.animewatch.domain.RecommendationEngine
 import com.example.animewatch.ui.AppViewModel
-import com.example.animewatch.ui.components.AddToListDialog
+import com.example.animewatch.ui.components.AddToListSheet
 import com.example.animewatch.ui.components.AnimeRow
 import com.example.animewatch.ui.components.EmptyState
 import com.example.animewatch.ui.components.ScreenBar
@@ -153,6 +153,6 @@ fun RecommendationsScreen(
     }
 
     addTarget?.let { anime ->
-        AddToListDialog(appVm, anime, onDismiss = { addTarget = null })
+        AddToListSheet(appVm, anime, onDismiss = { addTarget = null })
     }
 }

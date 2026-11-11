@@ -78,6 +78,8 @@ private object Routes {
     const val RECS = "recs"
     const val LIST_DETAIL = "list/{listId}"
     const val LIST_MEMBERS = "list/{listId}/members"
+    // La ricerca aperta da una lista: ciò che si aggiunge va dritto in quella lista.
+    const val LIST_SEARCH = "list/{listId}/search"
     const val ANIME_DETAIL = "anime/{animeId}"
     // Il Profilo e le sue pagine hanno tutte il prefisso "profile": lì il pulsante del profilo non compare.
     const val PROFILE = "profile"
@@ -85,6 +87,7 @@ private object Routes {
     const val UPDATES = "profile/updates"
     fun list(id: String) = "list/$id"
     fun listMembers(id: String) = "list/$id/members"
+    fun listSearch(id: String) = "list/$id/search"
     fun anime(id: Int) = "anime/$id"
 }
 
@@ -237,6 +240,19 @@ private fun MainContent(container: AppContainer, appVm: AppViewModel, updateVm: 
                             listId = listId,
                             onOpenAnime = { nav.navigate(Routes.anime(it)) },
                             onOpenMembers = { nav.navigate(Routes.listMembers(listId)) },
+                            onAddAnime = { nav.navigate(Routes.listSearch(listId)) },
+                        )
+                    }
+                    composable(Routes.LIST_SEARCH) { entry ->
+                        // Un SearchViewModel per questa voce del back stack: la ricerca della scheda Cerca resta com'era.
+                        val searchVm: SearchViewModel = viewModel(factory = viewModelFactory {
+                            initializer { SearchViewModel(container.animeRepo) }
+                        })
+                        SearchScreen(
+                            appVm,
+                            searchVm,
+                            onOpenAnime = { nav.navigate(Routes.anime(it)) },
+                            targetListId = entry.arguments?.getString("listId").orEmpty(),
                         )
                     }
                     composable(Routes.LIST_MEMBERS) { entry ->

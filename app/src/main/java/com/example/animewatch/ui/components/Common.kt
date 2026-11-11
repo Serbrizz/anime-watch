@@ -19,15 +19,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,12 +36,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.animewatch.data.model.Anime
-import com.example.animewatch.data.model.AnimeList
 import com.example.animewatch.data.model.ListRole
-import com.example.animewatch.ui.AppViewModel
 
 fun statusLabel(status: String?): String = when (status) {
     "FINISHED" -> "Concluso"
@@ -150,56 +143,4 @@ fun AnimeRow(
         }
         trailing()
     }
-}
-
-/**
- * Spunta/togli un anime da ciascuna lista. Vale per tutta la serie: se una qualunque stagione è già
- * nella lista la casella è spuntata.
- */
-@Composable
-fun AddToListDialog(vm: AppViewModel, anime: Anime, onDismiss: () -> Unit) {
-    val lists by vm.editableLists.collectAsStateWithLifecycle()
-    val franchises by vm.franchises.collectAsStateWithLifecycle()
-    LaunchedEffect(anime.id) { vm.ensureFranchises(listOf(anime.id)) }
-    val seasons = franchises[anime.id]?.seasonIds ?: listOf(anime.id)
-    AddToListDialog(
-        lists = lists,
-        isInList = { list -> list.animeIds.any { it in seasons } },
-        onToggle = { list, add -> vm.setInList(list, anime, add) },
-        onDismiss = onDismiss,
-    )
-}
-
-@Composable
-private fun AddToListDialog(
-    lists: List<AnimeList>,
-    isInList: (AnimeList) -> Boolean,
-    onToggle: (list: AnimeList, add: Boolean) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Aggiungi a lista") },
-        text = {
-            if (lists.isEmpty()) {
-                Text("Non hai liste in cui aggiungere anime: creane una dalla scheda Liste.")
-            } else {
-                Column {
-                    lists.forEach { list ->
-                        val inList = isInList(list)
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable { onToggle(list, !inList) },
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Checkbox(checked = inList, onCheckedChange = { onToggle(list, it) })
-                            Text(list.name)
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Fatto") } },
-    )
 }

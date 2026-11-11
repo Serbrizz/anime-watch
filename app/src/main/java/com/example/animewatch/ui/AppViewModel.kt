@@ -232,6 +232,18 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         if (clean.isNotEmpty()) container.listData.createList(u, clean)
     }
 
+    /** Lista nuova che contiene già [anime], salvato come la sua serie (vedi [setInList]). */
+    fun createListWith(name: String, anime: Anime) {
+        val u = user.value ?: return
+        val clean = name.trim()
+        if (clean.isEmpty()) return
+        container.animeRepo.cache(listOf(anime))
+        _anime.update { it + (anime.id to anime) }
+        viewModelScope.launch {
+            container.listData.createList(u, clean, listOf(franchiseOf(anime.id).rootId))
+        }
+    }
+
     /** Il proprietario la elimina per tutti; gli altri membri escono soltanto. */
     fun deleteOrLeaveList(list: AnimeList) {
         val u = uid ?: return

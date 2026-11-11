@@ -1,9 +1,8 @@
 package com.example.animewatch.ui
 
-import android.util.Log
 import com.example.animewatch.data.AppErrors
+import com.example.animewatch.data.AppLog
 import com.example.animewatch.data.ErrorKind
-import com.google.firebase.crashlytics.FirebaseCrashlytics
 
 /**
  * Testi d'errore per l'utente: in italiano, dicono cosa è successo e cosa fare. Il messaggio dell'eccezione
@@ -48,8 +47,7 @@ object ErrorMessages {
 
     private fun report(what: String, e: Throwable): ErrorKind {
         val kind = AppErrors.kind(e)
-        Log.w(TAG, "$what: errore $kind", e)
-        if (kind == ErrorKind.UNKNOWN) FirebaseCrashlytics.getInstance().recordException(e)
+        AppLog.error(TAG, "$what: errore $kind", e)
         return kind
     }
 

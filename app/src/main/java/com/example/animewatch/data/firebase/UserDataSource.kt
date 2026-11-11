@@ -1,6 +1,6 @@
 package com.example.animewatch.data.firebase
 
-import android.util.Log
+import com.example.animewatch.data.AppLog
 import com.example.animewatch.data.model.WatchProgress
 import com.google.firebase.firestore.CollectionReference
 import com.google.firebase.firestore.FirebaseFirestore
@@ -48,7 +48,7 @@ class UserDataSource(private val db: FirebaseFirestore) {
     }
 
     private fun com.google.android.gms.tasks.Task<*>.logFailure(op: String) {
-        addOnFailureListener { Log.e(TAG, "Scrittura Firestore fallita: $op", it) }
+        addOnFailureListener { AppLog.error(TAG, "Scrittura Firestore fallita: $op", it) }
     }
 
     private companion object {

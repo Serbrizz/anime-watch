@@ -1,7 +1,6 @@
 package com.example.animewatch.ui
 
 import android.content.Context
-import android.util.Log
 import androidx.credentials.exceptions.GetCredentialInterruptedException
 import androidx.credentials.exceptions.GetCredentialProviderConfigurationException
 import androidx.credentials.exceptions.GetCredentialUnsupportedException
@@ -11,6 +10,7 @@ import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.FirebaseTooManyRequestsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import androidx.lifecycle.viewModelScope
+import com.example.animewatch.data.AppLog
 import com.example.animewatch.data.model.Anime
 import com.example.animewatch.data.model.AnimeList
 import com.example.animewatch.data.model.Franchise
@@ -119,7 +119,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             user.filterNotNull().distinctUntilChangedBy { it.uid }.collect { u ->
                 runCatching { container.listData.migrateLegacyLists(u) }
-                    .onFailure { if (it is CancellationException) throw it else Log.w(TAG, "Migrazione liste", it) }
+                    .onFailure { if (it is CancellationException) throw it else AppLog.error(TAG, "Migrazione liste", it) }
             }
         }
     }
@@ -256,7 +256,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     private suspend fun franchiseOf(id: Int): Franchise =
         _franchises.value[id]
             ?: runCatching { resolve(listOf(id))[id] }
-                .onFailure { if (it is CancellationException) throw it else Log.w(TAG, "Stagioni di $id", it) }
+                .onFailure { if (it is CancellationException) throw it else AppLog.error(TAG, "Stagioni di $id", it) }
                 .getOrNull()
             ?: Franchise.single(id)
 
@@ -347,7 +347,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "Invito non accettato", e)
+                AppLog.error(TAG, "Invito non accettato", e)
                 _error.value = "Invito non più valido: la lista potrebbe essere stata eliminata."
             } finally {
                 _accepting.value = null

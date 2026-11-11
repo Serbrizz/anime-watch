@@ -94,6 +94,7 @@ app/src/main/java/com/example/animewatch/
 ├─ di/AppContainer.kt          costruisce Retrofit, Firestore, repository, servizi
 ├─ data/
 │  ├─ AppErrors.kt             tipo di un errore (rete, servizio, download corrotto, spazio, inatteso) (puro, testato)
+│  ├─ AppLog.kt                log: logcat, righe allegate ai report di Crashlytics, non fatali per gli errori inattesi (§8)
 │  ├─ model/Models.kt          Anime, WatchProgress, AnimeList, ListRole, ListInvite, UserProfile (+ regole di dominio)
 │  ├─ model/Franchise.kt       stagioni di una serie: raggruppamento (anche di risultati e consigli), ordine, etichette, stagione corrente (puro, testato)
 │  ├─ AnimeRepository.kt       memoria -> Firestore `anime/` -> AniList; catena prequel/sequel a ondate
@@ -112,7 +113,7 @@ app/src/main/java/com/example/animewatch/
 └─ ui/
    ├─ AnimeWatchRoot.kt        login se non c'è utente, altrimenti NavHost + bottom bar + banner errori
    ├─ AppViewModel.kt          utente, liste, inviti, progressi, cache schede, azioni
-   ├─ ErrorMessages.kt         testi d'errore per l'utente secondo AppErrors; log e Crashlytics per gli inattesi
+   ├─ ErrorMessages.kt         testi d'errore per l'utente secondo AppErrors; il dettaglio va ad AppLog
    ├─ components/Common.kt     AnimeRow, CoverImage, UserAvatar, EmptyState, etichette
    ├─ components/AddToListSheet.kt  pannello dal basso "Aggiungi a una lista" (anche crea una lista con l'anime dentro)
    ├─ components/ScreenBar.kt  titolo e azioni che ogni schermata dichiara per la barra in alto comune
@@ -219,7 +220,8 @@ in `lists/` con lo stesso ID e cancella le vecchie; quando non ce ne sono più, 
 - Le query sono costruite perché le regole le possano verificare: `lists` con `memberIds array-contains uid`, `invites` con
   `toEmail ==` oppure `fromUid ==` + `listId ==`. Niente `orderBy` (l'ordinamento si fa nel client): eviterebbe indici compositi.
 - **Le scritture non si attendono** (`.await()` solo sulle letture). Firestore le applica subito alla cache locale; attenderle
-  bloccherebbe la UI finché il server non conferma, cioè all'infinito offline. Gli errori finiscono nel log.
+  bloccherebbe la UI finché il server non conferma, cioè all'infinito offline. Gli errori (una scrittura rifiutata dalle
+  regole va persa senza che l'utente lo sappia) finiscono nel log e in Crashlytics (`AppLog.error`).
   **Eccezione:** accettare un invito si attende (con timeout di 15 s), perché solo il server può dire se l'invito è ancora valido
   e la lista non è ancora nella cache locale di chi entra.
 
@@ -312,6 +314,20 @@ Attivo in debug e in release, senza configurazione: i crash arrivano in console 
 dell'app, con l'UID dell'utente come identificatore. Anche gli errori di accesso con Google, che l'app mostra a schermo
 senza crashare, sono registrati come *non fatali* (`AuthDataSource.signInWithGoogle`).
 
+### Log: dove trovarli
+L'app scrive i log con `data/AppLog.kt`: `warn` per i problemi previsti, `error` per quelli che potrebbero non esserlo.
+Entrambi vanno nel logcat e fra le righe che Crashlytics allega al report successivo; `error` manda anche un *non fatale*
+a Crashlytics, tranne quando la causa è la rete o un servizio esterno (`AppErrors`), che sarebbero solo rumore.
+
+| Dove | Cosa c'è | Come si legge | Quanto resta |
+|---|---|---|---|
+| **Crashlytics** (console Firebase, progetto `anime-watch-873b9`) | Crash; non fatali: accesso con Google, errori inattesi mostrati all'utente, scritture Firestore rifiutate (liste, inviti, progressi, cache `anime/`), letture con permessi negati, risposte AniList illeggibili, migrazione fallita, invito non accettato. Su ogni report l'UID e le ultime righe di `AppLog` (scheda *Log*) | Console, cercando per UID; o i tool `crashlytics_*` dell'MCP Firebase. Arrivano all'avvio successivo dell'app | 90 giorni |
+| **Log del proxy** (Cloudflare, Workers Logs: `[observability]` in `proxy/wrangler.toml`) | Per ogni riordino modello, motivo di arresto e token; errori e quota di Gemini (429/503), preflight fallito, token rifiutati (401). Niente uid né prompt | Dashboard Cloudflare -> Workers -> `animewatch-ai` -> Logs; in tempo reale `npm run logs` da `proxy/` | Pochi giorni (piano gratuito) |
+| **Logcat** | Tutto quello che scrive `AppLog`, anche gli errori di rete e AniList che non vanno in Crashlytics | Telefono collegato: `adb logcat --pid=$(adb shell pidof com.example.animewatch)` | Finché il buffer del telefono non lo sovrascrive |
+
+Non si salvano statistiche d'uso (niente Analytics). Nei messaggi di `AppLog` niente email o altri dati personali:
+Crashlytics li conserva legati all'UID.
+
 ### Firma degli APK (obbligatorio)
 Tutti gli APK, debug e release, su ogni PC, sono firmati con **lo stesso keystore**, SHA-1 `appSigningSha1` in
 `gradle.properties`. Così l'accesso con Google funziona a tutti con un solo SHA-1 su Firebase, e chiunque può fare una
@@ -402,6 +418,9 @@ Verificato (11/11/2026):
   che risponde `false` o senza rete il pulsante è disattivato con "Gemini non è disponibile al momento".
   Cerchio con anello, logo verde e spunta; spento e riacceso torna il risultato in memoria senza chiamare Gemini;
   acceso durante il primo caricamento l'algoritmo si calcola una volta sola; con AniList in errore (simulato) torna aperto.
+- Messaggi d'errore su dispositivo: Consigliati e Cerca senza rete, AniList in errore (simulato); tornata la rete, Cerca e
+  "Aggiorna" ripartono. Un `AppLog.error` di prova arriva in Crashlytics come non fatale con UID e righe di log; gli errori
+  di rete restano fuori.
 
 Da verificare:
 1. Su dispositivo, con due account Google: invito, accettazione, rifiuto, sola visualizzazione, uscita, modalità aereo.
@@ -422,6 +441,8 @@ poteri e limiti del proprietario, eliminazione, migrazione). Il test non è nel 
 - Gli stati sono `StateFlow` immutabili; le schermate usano `collectAsStateWithLifecycle()`.
 - Mai mostrare all'utente il messaggio di un'eccezione (tecnico e in inglese): i testi d'errore vengono da
   `ui/ErrorMessages.kt`, che dice cosa è successo e cosa fare e lascia il dettaglio a log e Crashlytics.
+- Log con `AppLog`, non con `android.util.Log`: altrimenti non arrivano a Crashlytics (§8, "Log: dove trovarli").
+  Il codice puro (`RecommendationEngine`, `Franchise`, `AppErrors`…) non logga.
 - Ogni nuova query AniList passa da `AniListClient` e restituisce `Anime`; ogni nuovo campo di `Anime` va aggiunto a DTO, mapper Firestore e **regole Firestore** (`hasOnly`).
 - I commenti spiegano il *perché* di una scelta non ovvia, non ripetono il codice.
 - Mai committare `google-services.json`, `local.properties`, keystore.

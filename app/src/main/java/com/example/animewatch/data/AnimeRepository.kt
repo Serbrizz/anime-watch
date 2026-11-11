@@ -1,6 +1,5 @@
 package com.example.animewatch.data
 
-import android.util.Log
 import com.example.animewatch.data.firebase.toAnime
 import com.example.animewatch.data.firebase.toMap
 import com.example.animewatch.data.model.Anime
@@ -125,14 +124,17 @@ class AnimeRepository(
         animes.chunked(400).forEach { chunk ->
             val batch = db.batch()
             chunk.forEach { batch.set(collection.document(it.id.toString()), it.toMap()) }
-            batch.commit().addOnFailureListener { Log.w(TAG, "Scrittura cache anime fallita", it) }
+            batch.commit().addOnFailureListener { AppLog.error(TAG, "Scrittura cache anime fallita", it) }
         }
     }
 
-    /** Un errore di rete non deve fermare gli altri livelli; l'annullamento della coroutine sì. */
+    /**
+     * Un errore di rete non deve fermare gli altri livelli; l'annullamento della coroutine sì.
+     * Rete e AniList che non risponde non vanno in Crashlytics, un DTO che non si legge o permessi negati sì.
+     */
     private fun logOrRethrow(message: String, error: Throwable) {
         if (error is CancellationException) throw error
-        Log.w(TAG, message, error)
+        AppLog.error(TAG, message, error)
     }
 
     private companion object {

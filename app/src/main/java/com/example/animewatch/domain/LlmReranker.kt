@@ -1,6 +1,6 @@
 package com.example.animewatch.domain
 
-import android.util.Log
+import com.example.animewatch.data.AppLog
 import com.example.animewatch.data.model.WatchProgress
 import com.example.animewatch.data.remote.ai.AiProxyApi
 import com.example.animewatch.data.remote.ai.ChatMessage
@@ -32,7 +32,7 @@ class LlmReranker(private val api: AiProxyApi?) {
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Preflight AI fallito", e)
+            AppLog.warn(TAG, "Preflight AI fallito", e)
             false
         }
     }
@@ -65,10 +65,10 @@ class LlmReranker(private val api: AiProxyApi?) {
         } catch (e: HttpException) {
             // Il motivo (credito esaurito, modello non disponibile…) è solo nel corpo della risposta.
             val detail = runCatching { e.response()?.errorBody()?.string() }.getOrNull()
-            Log.w(TAG, "Riordino AI fallito: HTTP ${e.code()} $detail, uso l'algoritmo")
+            AppLog.warn(TAG, "Riordino AI fallito: HTTP ${e.code()} $detail, uso l'algoritmo")
             null
         } catch (e: Exception) {
-            Log.w(TAG, "Riordino AI fallito, uso l'algoritmo", e)
+            AppLog.warn(TAG, "Riordino AI fallito, uso l'algoritmo", e)
             null
         }
     }

@@ -1,6 +1,6 @@
 package com.example.animewatch.data.firebase
 
-import android.util.Log
+import com.example.animewatch.data.AppLog
 import com.example.animewatch.data.model.AnimeList
 import com.example.animewatch.data.model.ListInvite
 import com.example.animewatch.data.model.ListRole
@@ -70,7 +70,7 @@ class ListDataSource(private val db: FirebaseFirestore) {
     suspend fun deleteList(ownerUid: String, listId: String) {
         val pending = runCatching { pendingInvitesQuery(ownerUid, listId).get().await().documents }
             .getOrElse {
-                Log.w(TAG, "Inviti della lista non letti: restano in attesa", it)
+                AppLog.error(TAG, "Inviti della lista non letti: restano in attesa", it)
                 emptyList()
             }
         db.batch().apply {
@@ -200,7 +200,7 @@ class ListDataSource(private val db: FirebaseFirestore) {
     }
 
     private fun Task<*>.logFailure(op: String) {
-        addOnFailureListener { Log.e(TAG, "Scrittura Firestore fallita: $op", it) }
+        addOnFailureListener { AppLog.error(TAG, "Scrittura Firestore fallita: $op", it) }
     }
 
     private companion object {

@@ -2,7 +2,6 @@ package com.example.animewatch.data.firebase
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.util.Log
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
@@ -10,6 +9,7 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.example.animewatch.data.AppLog
 import com.example.animewatch.data.model.UserProfile
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -80,7 +80,7 @@ class AuthDataSource(
         auth.signOut()
         // Dimentica l'account scelto, così al prossimo accesso si può sceglierne un altro.
         runCatching { CredentialManager.create(appContext).clearCredentialState(ClearCredentialStateRequest()) }
-            .onFailure { Log.w(TAG, "Pulizia credenziali non riuscita", it) }
+            .onFailure { AppLog.warn(TAG, "Pulizia credenziali non riuscita", it) }
     }
 
     /**

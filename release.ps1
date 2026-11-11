@@ -14,7 +14,7 @@
     2. incrementa appVersion in gradle.properties (unica fonte della versione)
     3. unit test e APK di release firmato (gradlew), copiato in build\release\AnimeWatch.apk;
        controlla con apksigner che sia firmato con il certificato atteso
-    4. commit (dopo conferma) "chore: 🔖 release <versione>", tag annotato v<versione>
+    4. commit (dopo conferma) "chore(release): 🚀 release <versione>", tag annotato v<versione>
        e push di main e tag insieme (--atomic: o tutti e due o nessuno)
     5. release su GitHub con gh: titolo "AnimeWatch <versione>", le note e l'APK.
        Senza gh apre la pagina della nuova release, da completare a mano
@@ -314,7 +314,7 @@ if ([int]$parts[1] -ge 100 -or [int]$parts[2] -ge 100) {
     Fail-Usage "La versione $Version non è valida: minor e patch devono restare sotto 100 (versionCode)." $current
 }
 $tag = "v$Version"
-$message = "chore: 🔖 release $Version"
+$message = "chore(release): 🚀 release $Version"
 
 # ---- Release --------------------------------------------------------------------
 

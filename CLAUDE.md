@@ -357,7 +357,8 @@ poteri e limiti del proprietario, eliminazione, migrazione). Il test non è nel 
 - Messaggi di commit: una sola riga, Conventional Commits con gitmoji, in inglese, all'imperativo e in minuscolo, senza scope, body o trailer (niente `Co-Authored-By`). Brevi e diretti: cosa cambia, non perché né come. Esempi: `feat: ✨ add deploy for tagged releases`, `fix: 🐛 display sign-in errors`, `feat: ✨ use checkboxes for dish markers`.
 - Le modifiche a questo file (`CLAUDE.md`) vanno nel commit che implementa ciò che descrivono: niente commit `docs` separati, niente fixup del commit che le ha introdotte.
 - Commit, push e riscritture della history solo su richiesta.
-- Il commit di release (`chore: 🔖 release X.Y.Z`) lo crea solo `release.ps1` (§13), mai a mano.
+- Il commit di release (`chore(release): 🚀 release X.Y.Z`, unica eccezione alla regola senza scope, uguale agli altri
+  progetti) lo crea solo `release.ps1` (§13), mai a mano.
 
 ## 13. Release e aggiornamenti
 

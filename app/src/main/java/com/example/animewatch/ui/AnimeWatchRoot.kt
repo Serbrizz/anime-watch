@@ -45,7 +45,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -136,6 +135,11 @@ private fun MainContent(container: AppContainer, appVm: AppViewModel, updateVm: 
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val destination = backStack?.destination
+    // La sezione di una schermata interna è quella da cui ci si è arrivati: l'ultima radice nello stack.
+    // Così una scheda aperta da Cerca accende Cerca, la stessa aperta da una lista accende Liste.
+    val stack by nav.currentBackStack.collectAsStateWithLifecycle()
+    val currentSection = stack.lastOrNull { entry -> topLevel.any { it.route == entry.destination.route } }
+        ?.destination?.route
     val error by appVm.error.collectAsStateWithLifecycle()
     val bars = remember { ScreenBars() }
 
@@ -169,16 +173,23 @@ private fun MainContent(container: AppContainer, appVm: AppViewModel, updateVm: 
                 )
             },
             bottomBar = {
-                if (topLevel.any { it.route == destination?.route }) {
+                // Anche dentro liste e schede; non nel Profilo, che si apre dalla foto e non è una sezione.
+                if (destination != null && destination.route?.startsWith(Routes.PROFILE) != true) {
                     NavigationBar {
                         topLevel.forEach { item ->
                             NavigationBarItem(
-                                selected = destination?.hierarchy?.any { it.route == item.route } == true,
+                                selected = item.route == currentSection,
                                 onClick = {
-                                    nav.navigate(item.route) {
-                                        popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
+                                    if (item.route == currentSection) {
+                                        // Ritoccare la sezione in cui si è riporta alla sua radice.
+                                        nav.popBackStack(item.route, inclusive = false)
+                                    } else {
+                                        // Ogni sezione conserva il proprio stack: si ritrova dove la si era lasciata.
+                                        nav.navigate(item.route) {
+                                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
                                     }
                                 },
                                 icon = { Icon(item.icon, contentDescription = null) },

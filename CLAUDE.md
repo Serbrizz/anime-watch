@@ -38,7 +38,7 @@ liste condivise (commenti, profili pubblici), tracciamento dei voti personali, t
 | Navigazione | Navigation Compose, rotte stringa | 2.8.2 |
 | Architettura | MVVM, `StateFlow`, un `AppViewModel` condiviso + un ViewModel per Cerca e per Consigliati | Lifecycle 2.8.6 |
 | DI | Manuale (`di/AppContainer.kt`), niente Hilt | — |
-| Backend utente | Firebase Auth (solo Google) + Cloud Firestore | BoM 33.4.0 |
+| Backend utente | Firebase Auth (solo Google) + Cloud Firestore + Crashlytics | BoM 33.4.0, plugin Crashlytics 3.0.2 |
 | Accesso Google | Credential Manager (`androidx.credentials`) + Google ID | 1.3.0 / 1.1.1 |
 | Dati anime | AniList GraphQL, `https://graphql.anilist.co/` | pubblico, senza chiave |
 | LLM (opzionale) | OpenRouter, `https://openrouter.ai/api/v1/` | chiave in `local.properties` |
@@ -64,7 +64,7 @@ Firestore fa da **cache condivisa** davanti ad AniList (§5), così si fa una so
 
 ```
 app/src/main/java/com/example/animewatch/
-├─ AnimeWatchApp.kt            crea AppContainer
+├─ AnimeWatchApp.kt            crea AppContainer, passa l'UID a Crashlytics
 ├─ MainActivity.kt             setContent { Theme { AnimeWatchRoot } }
 ├─ di/AppContainer.kt          costruisce Retrofit, Firestore, repository, servizi
 ├─ data/
@@ -198,6 +198,11 @@ non può inventare titoli. Ogni anomalia (rete, JSON non valido, ID sconosciuti)
 5. Firestore Database -> crea in modalità produzione, poi pubblica le regole: `firebase deploy --only firestore:rules`
    (usa `firebase.json` e `firestore.rules`) oppure incollale nella console.
 6. Se cambi il package name, aggiornalo in `app/build.gradle.kts` (namespace e applicationId) e nella console Firebase.
+
+### Crashlytics
+Attivo in debug e in release, senza configurazione: i crash arrivano in console (Crashlytics) all'avvio successivo
+dell'app, con l'UID dell'utente come identificatore. Anche gli errori di accesso con Google, che l'app mostra a schermo
+senza crashare, sono registrati come *non fatali* (`AuthDataSource.signInWithGoogle`).
 
 ### OpenRouter (opzionale)
 Copia `local.properties.example` in `local.properties` e imposta `OPENROUTER_API_KEY` (e se vuoi `OPENROUTER_MODEL`).

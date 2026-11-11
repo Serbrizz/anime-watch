@@ -14,6 +14,8 @@ import com.example.animewatch.data.model.UserProfile
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.crashlytics.FirebaseCrashlytics
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -46,7 +48,16 @@ class AuthDataSource(
      * Mostra il selettore degli account Google. Serve il context di un'Activity: il selettore è una UI.
      * @return `false` se l'utente chiude il selettore senza scegliere un account.
      */
-    suspend fun signInWithGoogle(activityContext: Context): Boolean {
+    suspend fun signInWithGoogle(activityContext: Context): Boolean = try {
+        requestGoogleSignIn(activityContext)
+    } catch (e: Exception) {
+        // L'errore finisce a schermo e non fa crashare: senza questa riga non arriverebbe a Crashlytics,
+        // e sui telefoni degli altri non si saprebbe perché l'accesso fallisce.
+        if (e !is CancellationException) FirebaseCrashlytics.getInstance().recordException(e)
+        throw e
+    }
+
+    private suspend fun requestGoogleSignIn(activityContext: Context): Boolean {
         val request = GetCredentialRequest.Builder()
             .addCredentialOption(GetSignInWithGoogleOption.Builder(webClientId()).build())
             .build()

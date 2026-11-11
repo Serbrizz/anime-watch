@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.animewatch.data.AnimeRepository
 import com.example.animewatch.data.model.Anime
 import com.example.animewatch.data.model.Franchise
+import com.example.animewatch.ui.ErrorMessages
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -83,7 +84,7 @@ class SearchViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(loading = false, error = "Ricerca non riuscita: ${e.message}") }
+                _state.update { it.copy(loading = false, error = ErrorMessages.search(e)) }
             }
         }
     }

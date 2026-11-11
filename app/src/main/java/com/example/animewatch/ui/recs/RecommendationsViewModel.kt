@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.animewatch.data.model.WatchProgress
 import com.example.animewatch.domain.Recommendation
 import com.example.animewatch.domain.RecommendationService
+import com.example.animewatch.ui.ErrorMessages
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -70,7 +71,7 @@ class RecommendationsViewModel(private val service: RecommendationService) : Vie
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(loading = false, error = "Impossibile caricare i consigli: ${e.message}") }
+                _state.update { it.copy(loading = false, error = ErrorMessages.recommendations(e)) }
             }
         }
     }

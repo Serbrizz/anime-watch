@@ -1,12 +1,12 @@
 package com.example.animewatch.ui.update
 
 import android.os.SystemClock
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.animewatch.data.update.AppRelease
 import com.example.animewatch.data.update.AppUpdater
 import com.example.animewatch.data.update.InstallResult
+import com.example.animewatch.ui.ErrorMessages
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -70,10 +70,10 @@ class UpdateViewModel(private val updater: AppUpdater) : ViewModel() {
                 _state.update { it.copy(checking = false) }
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "controllo aggiornamenti fallito", e)
+                val message = ErrorMessages.updateCheck(e)
                 nextCheckAt = SystemClock.elapsedRealtime() + RETRY_MS
                 _state.update { it.copy(checking = false) }
-                if (manual) _messages.tryEmit("Impossibile verificare gli aggiornamenti: sei connesso a Internet?")
+                if (manual) _messages.tryEmit(message)
                 return@launch
             }
             _state.update { s ->
@@ -118,14 +118,12 @@ class UpdateViewModel(private val updater: AppUpdater) : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "aggiornamento non riuscito", e)
-                _state.update { it.copy(downloading = false, error = "Aggiornamento non riuscito: ${e.message ?: e}") }
+                _state.update { it.copy(downloading = false, error = ErrorMessages.updateDownload(e)) }
             }
         }
     }
 
     private companion object {
-        const val TAG = "Update"
         const val RECHECK_MS = 6 * 60 * 60 * 1000L
         const val RETRY_MS = 2 * 60 * 1000L
     }

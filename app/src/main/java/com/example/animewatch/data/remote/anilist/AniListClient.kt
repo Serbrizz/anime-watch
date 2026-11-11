@@ -1,12 +1,12 @@
 package com.example.animewatch.data.remote.anilist
 
+import com.example.animewatch.data.ServiceException
 import com.example.animewatch.data.model.Anime
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
-import java.io.IOException
 
 /** Livello sottile sopra AniListApi: costruisce le query e converte i DTO in [Anime]. */
 class AniListClient(private val api: AniListApi) {
@@ -38,7 +38,7 @@ class AniListClient(private val api: AniListApi) {
 
     private suspend fun fetch(query: String, variables: JsonObject): List<MediaDto> {
         val response = api.execute(GraphQlRequest(query, variables))
-        response.errors?.firstOrNull()?.let { throw IOException("AniList: ${it.message}") }
+        response.errors?.firstOrNull()?.let { throw ServiceException("AniList: ${it.message}") }
         return response.data?.page?.media.orEmpty()
     }
 

@@ -143,7 +143,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 source(u)
                     .onStart { emit(initial) }
                     .catch {
-                        reportSyncError(u.uid, "Sincronizzazione $what non riuscita: ${it.message}")
+                        reportSyncError(u.uid, what, it)
                         emit(empty)
                     }
             }
@@ -151,8 +151,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.Eagerly, initial)
 
     /** All'uscita i listener del vecchio utente possono fallire per permessi: quell'errore non va mostrato. */
-    private fun reportSyncError(forUid: String, message: String) {
-        if (uid == forUid) _error.value = message
+    private fun reportSyncError(forUid: String, what: String, e: Throwable) {
+        if (uid == forUid) _error.value = ErrorMessages.sync(what, e)
     }
 
     // ---------- Accesso ----------
@@ -177,11 +177,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     /**
      * I messaggi di Credential Manager e Firebase sono tecnici e in inglese: per i casi comuni si dice
-     * all'utente cosa fare. Il testo originale resta in fondo e in Crashlytics, per la diagnosi.
+     * all'utente cosa fare. Il testo originale non si mostra: lo registra Crashlytics (AuthDataSource).
      */
     private fun signInErrorMessage(e: Exception): String {
         val detail = e.message.orEmpty()
-        val hint = when {
+        return when {
             e is NoCredentialException ->
                 "Nessun account Google disponibile: aggiungine uno nelle impostazioni del telefono e riprova."
             e is GetCredentialProviderConfigurationException || e is GetCredentialUnsupportedException ->
@@ -189,15 +189,16 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             e is GetCredentialInterruptedException -> "Accesso interrotto, riprova."
             // DEVELOPER_ERROR: l'APK è firmato con una chiave il cui SHA-1 non è registrato in Firebase.
             "28444" in detail || "Developer console" in detail ->
-                "Questa copia dell'app non è autorizzata per l'accesso con Google (SHA-1 della firma non " +
-                    "registrato in Firebase). Installa l'APK ufficiale."
+                "Questa copia dell'app non è autorizzata per l'accesso con Google. Installa l'APK ufficiale."
+            // google-services.json senza client OAuth web (AuthDataSource.webClientId).
+            e is IllegalStateException && "OAuth" in detail ->
+                "Questa copia dell'app non è configurata per l'accesso con Google. Installa l'APK ufficiale."
             e is FirebaseNetworkException || "network" in detail.lowercase() ->
                 "Serve la connessione a internet per il primo accesso."
             e is FirebaseTooManyRequestsException -> "Troppi tentativi, riprova fra qualche minuto."
             e is FirebaseAuthInvalidUserException -> "Questo account è stato disabilitato."
-            else -> null
+            else -> "Accesso non riuscito, riprova."
         }
-        return if (hint != null) "$hint\n($detail)" else "Accesso non riuscito: $detail"
     }
 
     fun signOut() {

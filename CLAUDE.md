@@ -93,6 +93,7 @@ app/src/main/java/com/example/animewatch/
 ├─ MainActivity.kt             setContent { Theme { AnimeWatchRoot } }
 ├─ di/AppContainer.kt          costruisce Retrofit, Firestore, repository, servizi
 ├─ data/
+│  ├─ AppErrors.kt             tipo di un errore (rete, servizio, download corrotto, spazio, inatteso) (puro, testato)
 │  ├─ model/Models.kt          Anime, WatchProgress, AnimeList, ListRole, ListInvite, UserProfile (+ regole di dominio)
 │  ├─ model/Franchise.kt       stagioni di una serie: raggruppamento (anche di risultati e consigli), ordine, etichette, stagione corrente (puro, testato)
 │  ├─ AnimeRepository.kt       memoria -> Firestore `anime/` -> AniList; catena prequel/sequel a ondate
@@ -111,6 +112,7 @@ app/src/main/java/com/example/animewatch/
 └─ ui/
    ├─ AnimeWatchRoot.kt        login se non c'è utente, altrimenti NavHost + bottom bar + banner errori
    ├─ AppViewModel.kt          utente, liste, inviti, progressi, cache schede, azioni
+   ├─ ErrorMessages.kt         testi d'errore per l'utente secondo AppErrors; log e Crashlytics per gli inattesi
    ├─ components/Common.kt     AnimeRow, CoverImage, UserAvatar, EmptyState, etichette
    ├─ components/AddToListSheet.kt  pannello dal basso "Aggiungi a una lista" (anche crea una lista con l'anime dentro)
    ├─ components/ScreenBar.kt  titolo e azioni che ogni schermata dichiara per la barra in alto comune
@@ -299,7 +301,8 @@ dell'allegato dell'ultima.
    o dalle impostazioni dell'app in console. Senza, il selettore Google fallisce. È già registrato: è l'unico SHA-1
    dell'app, e non se ne aggiungono altri perché tutti firmano con lo stesso keystore.
 4. Scarica `google-services.json` in `app/` **dopo** i passi 2 e 3, altrimenti manca il client OAuth (`oauth_client` vuoto)
-   e l'accesso dà "client OAuth mancante". È nel `.gitignore`; `app/google-services.json.example` mostra il formato.
+   e l'accesso dà "Questa copia dell'app non è configurata per l'accesso con Google" ("client OAuth mancante" nel log).
+   È nel `.gitignore`; `app/google-services.json.example` mostra il formato.
 5. Firestore Database -> crea in modalità produzione, poi pubblica le regole: `firebase deploy --only firestore:rules`
    (usa `firebase.json` e `firestore.rules`) oppure incollale nella console.
 6. Se cambi il package name, aggiornalo in `app/build.gradle.kts` (namespace e applicationId) e nella console Firebase.
@@ -337,7 +340,7 @@ Cambiarli non richiede una nuova versione dell'app, basta un deploy. I modelli d
 
 ### Build e test
 ```
-./gradlew :app:testDebugUnitTest          # unit test (raccomandazioni, liste condivise, franchise, versioni)
+./gradlew :app:testDebugUnitTest          # unit test (raccomandazioni, liste condivise, franchise, versioni, errori)
 ./gradlew :app:assembleDebug              # APK in app/build/outputs/apk/debug/
 .\install.ps1 [-Release] [-Serial <id>]   # git fetch + pull --ff-only, build, adb install -r sul telefono collegato
 ```
@@ -417,6 +420,8 @@ poteri e limiti del proprietario, eliminazione, migrazione). Il test non è nel 
 - Kotlin ufficiale (`kotlin.code.style=official`), 4 spazi, righe ragionevoli (~120).
 - Nessuna logica di business nei composable: azioni nei ViewModel, regole di dominio in `data/model` o `domain`.
 - Gli stati sono `StateFlow` immutabili; le schermate usano `collectAsStateWithLifecycle()`.
+- Mai mostrare all'utente il messaggio di un'eccezione (tecnico e in inglese): i testi d'errore vengono da
+  `ui/ErrorMessages.kt`, che dice cosa è successo e cosa fare e lascia il dettaglio a log e Crashlytics.
 - Ogni nuova query AniList passa da `AniListClient` e restituisce `Anime`; ogni nuovo campo di `Anime` va aggiunto a DTO, mapper Firestore e **regole Firestore** (`hasOnly`).
 - I commenti spiegano il *perché* di una scelta non ovvia, non ripetono il codice.
 - Mai committare `google-services.json`, `local.properties`, keystore.

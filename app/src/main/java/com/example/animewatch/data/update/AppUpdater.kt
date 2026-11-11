@@ -5,6 +5,8 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import androidx.core.content.FileProvider
+import com.example.animewatch.data.CorruptDownloadException
+import com.example.animewatch.data.ServiceException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -68,8 +70,8 @@ class AppUpdater(
         val (owner, name) = repo.split('/', limit = 2)
         val response = api.releases(owner, name)
         if (response.code() == 404) return null // repository privato o inesistente: per l'app nessuna release
-        if (!response.isSuccessful) throw IOException("GitHub ha risposto HTTP ${response.code()}")
-        val all = response.body() ?: throw IOException("risposta di GitHub vuota")
+        if (!response.isSuccessful) throw ServiceException("GitHub ha risposto HTTP ${response.code()}")
+        val all = response.body() ?: throw ServiceException("risposta di GitHub vuota")
         val newer = PendingReleases.newerThan(all, currentVersion, ASSET_NAME)
         val release = newer.firstOrNull() ?: return null
         val apk = release.assets.first { it.name.equals(ASSET_NAME, ignoreCase = true) }
@@ -94,8 +96,8 @@ class AppUpdater(
         val request = Request.Builder().url(release.apkUrl).build()
         try {
             http.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) throw IOException("download fallito: HTTP ${response.code}")
-                val body = response.body ?: throw IOException("download vuoto")
+                if (!response.isSuccessful) throw ServiceException("download fallito: HTTP ${response.code}")
+                val body = response.body ?: throw CorruptDownloadException("download vuoto")
                 val total = body.contentLength().takeIf { it > 0 } ?: release.size
                 val digest = MessageDigest.getInstance("SHA-256")
                 var read = 0L
@@ -114,11 +116,11 @@ class AppUpdater(
                     }
                 }
                 if (release.size > 0 && read != release.size) {
-                    throw IOException("download incompleto ($read di ${release.size} byte)")
+                    throw CorruptDownloadException("download incompleto ($read di ${release.size} byte)")
                 }
                 val sha256 = digest.digest().joinToString("") { "%02x".format(it) }
                 if (release.sha256 != null && !release.sha256.equals(sha256, ignoreCase = true)) {
-                    throw IOException("il file scaricato è corrotto (impronta sha256 diversa)")
+                    throw CorruptDownloadException("il file scaricato è corrotto (impronta sha256 diversa)")
                 }
             }
             dest.delete()

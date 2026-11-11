@@ -1,15 +1,23 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.example.animewatch.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -17,14 +25,19 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import android.widget.Toast
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -41,18 +54,23 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.animewatch.di.AppContainer
+import com.example.animewatch.ui.components.LocalScreenBars
+import com.example.animewatch.ui.components.ScreenBars
+import com.example.animewatch.ui.components.UserAvatar
 import com.example.animewatch.ui.detail.AnimeDetailScreen
 import com.example.animewatch.ui.invites.InvitesScreen
 import com.example.animewatch.ui.lists.ListDetailScreen
 import com.example.animewatch.ui.lists.ListMembersScreen
 import com.example.animewatch.ui.lists.ListsScreen
 import com.example.animewatch.ui.login.LoginScreen
+import com.example.animewatch.ui.profile.ProfileScreen
 import com.example.animewatch.ui.recs.RecommendationsScreen
 import com.example.animewatch.ui.recs.RecommendationsViewModel
 import com.example.animewatch.ui.search.SearchScreen
 import com.example.animewatch.ui.search.SearchViewModel
 import com.example.animewatch.ui.update.UpdateDialog
 import com.example.animewatch.ui.update.UpdateViewModel
+import com.example.animewatch.ui.update.UpdatesScreen
 
 private object Routes {
     const val LISTS = "lists"
@@ -61,7 +79,10 @@ private object Routes {
     const val LIST_DETAIL = "list/{listId}"
     const val LIST_MEMBERS = "list/{listId}/members"
     const val ANIME_DETAIL = "anime/{animeId}"
-    const val INVITES = "invites"
+    // Il Profilo e le sue pagine hanno tutte il prefisso "profile": lì il pulsante del profilo non compare.
+    const val PROFILE = "profile"
+    const val INVITES = "profile/invites"
+    const val UPDATES = "profile/updates"
     fun list(id: String) = "list/$id"
     fun listMembers(id: String) = "list/$id/members"
     fun anime(id: Int) = "anime/$id"
@@ -113,98 +134,147 @@ private fun MainContent(container: AppContainer, appVm: AppViewModel, updateVm: 
     val backStack by nav.currentBackStackEntryAsState()
     val destination = backStack?.destination
     val error by appVm.error.collectAsStateWithLifecycle()
+    val bars = remember { ScreenBars() }
 
-    Scaffold(
-        bottomBar = {
-            if (topLevel.any { it.route == destination?.route }) {
-                NavigationBar {
-                    topLevel.forEach { item ->
-                        NavigationBarItem(
-                            selected = destination?.hierarchy?.any { it.route == item.route } == true,
-                            onClick = {
-                                nav.navigate(item.route) {
-                                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = { Icon(item.icon, contentDescription = null) },
-                            label = { Text(item.label) },
+    // Una barra in alto per tutte le schermate: ognuna dichiara solo titolo e azioni con ScreenBar.
+    CompositionLocalProvider(LocalScreenBars provides bars) {
+        Scaffold(
+            topBar = {
+                val spec = bars[backStack]
+                val section = topLevel.firstOrNull { it.route == destination?.route }
+                TopAppBar(
+                    title = {
+                        // Una sezione della barra in basso che non dichiara ScreenBar prende la propria etichetta.
+                        Text(spec?.title ?: section?.label.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    },
+                    navigationIcon = {
+                        if (backStack != null && section == null) {
+                            IconButton(onClick = { nav.navigateUp() }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro")
+                            }
+                        }
+                    },
+                    actions = {
+                        spec?.actions?.invoke(this)
+                        // Dentro il Profilo (e nelle sue pagine) il pulsante riporterebbe solo lì.
+                        if (destination?.route?.startsWith(Routes.PROFILE) != true) {
+                            ProfileButton(appVm, updateVm, onClick = {
+                                nav.navigate(Routes.PROFILE) { launchSingleTop = true }
+                            })
+                        }
+                    },
+                )
+            },
+            bottomBar = {
+                if (topLevel.any { it.route == destination?.route }) {
+                    NavigationBar {
+                        topLevel.forEach { item ->
+                            NavigationBarItem(
+                                selected = destination?.hierarchy?.any { it.route == item.route } == true,
+                                onClick = {
+                                    nav.navigate(item.route) {
+                                        popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                },
+                                icon = { Icon(item.icon, contentDescription = null) },
+                                label = { Text(item.label) },
+                            )
+                        }
+                    }
+                }
+            },
+        ) { padding ->
+            Column(Modifier.padding(padding)) {
+                error?.let { message ->
+                    Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                message,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = appVm::dismissError) { Text("Chiudi") }
+                        }
+                    }
+                }
+
+                NavHost(nav, startDestination = Routes.LISTS, modifier = Modifier.weight(1f)) {
+                    composable(Routes.LISTS) {
+                        ListsScreen(appVm, onOpenList = { nav.navigate(Routes.list(it)) })
+                    }
+                    composable(Routes.PROFILE) {
+                        ProfileScreen(
+                            appVm,
+                            updateVm,
+                            onOpenInvites = { nav.navigate(Routes.INVITES) },
+                            onOpenUpdates = { nav.navigate(Routes.UPDATES) },
                         )
+                    }
+                    composable(Routes.INVITES) { InvitesScreen(appVm) }
+                    composable(Routes.UPDATES) { UpdatesScreen(updateVm) }
+                    composable(Routes.SEARCH) {
+                        val searchVm: SearchViewModel = viewModel(factory = viewModelFactory {
+                            initializer { SearchViewModel(container.animeRepo) }
+                        })
+                        SearchScreen(appVm, searchVm, onOpenAnime = { nav.navigate(Routes.anime(it)) })
+                    }
+                    composable(Routes.RECS) {
+                        val recsVm: RecommendationsViewModel = viewModel(factory = viewModelFactory {
+                            initializer { RecommendationsViewModel(container.recommender) }
+                        })
+                        RecommendationsScreen(appVm, recsVm, onOpenAnime = { nav.navigate(Routes.anime(it)) })
+                    }
+                    composable(Routes.LIST_DETAIL) { entry ->
+                        val listId = entry.arguments?.getString("listId").orEmpty()
+                        ListDetailScreen(
+                            vm = appVm,
+                            listId = listId,
+                            onOpenAnime = { nav.navigate(Routes.anime(it)) },
+                            onOpenMembers = { nav.navigate(Routes.listMembers(listId)) },
+                        )
+                    }
+                    composable(Routes.LIST_MEMBERS) { entry ->
+                        ListMembersScreen(
+                            vm = appVm,
+                            listId = entry.arguments?.getString("listId").orEmpty(),
+                            // Dopo "Esci dalla lista" si torna alle liste, non al dettaglio di una lista non più nostra.
+                            onLeft = { nav.popBackStack(Routes.LISTS, inclusive = false) },
+                        )
+                    }
+                    composable(
+                        Routes.ANIME_DETAIL,
+                        arguments = listOf(navArgument("animeId") { type = NavType.IntType }),
+                    ) { entry ->
+                        AnimeDetailScreen(vm = appVm, animeId = entry.arguments?.getInt("animeId") ?: 0)
                     }
                 }
             }
-        },
-    ) { padding ->
-        Column(Modifier.padding(padding)) {
-            error?.let { message ->
-                Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            message,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(onClick = appVm::dismissError) { Text("Chiudi") }
-                    }
-                }
-            }
+        }
+    }
+}
 
-            NavHost(nav, startDestination = Routes.LISTS, modifier = Modifier.weight(1f)) {
-                composable(Routes.LISTS) {
-                    ListsScreen(
-                        appVm,
-                        updateVm,
-                        onOpenList = { nav.navigate(Routes.list(it)) },
-                        onOpenInvites = { nav.navigate(Routes.INVITES) },
-                    )
+/** Foto del profilo in alto a destra: il numero di inviti in attesa, oppure un pallino se c'è un aggiornamento. */
+@Composable
+private fun ProfileButton(appVm: AppViewModel, updateVm: UpdateViewModel, onClick: () -> Unit) {
+    val me by appVm.user.collectAsStateWithLifecycle()
+    val invites by appVm.incomingInvites.collectAsStateWithLifecycle()
+    val update by updateVm.state.collectAsStateWithLifecycle()
+    IconButton(onClick = onClick, modifier = Modifier.semantics { contentDescription = "Profilo" }) {
+        BadgedBox(
+            badge = {
+                when {
+                    invites.isNotEmpty() -> Badge { Text("${invites.size}") }
+                    update.available != null -> Badge()
                 }
-                composable(Routes.INVITES) {
-                    InvitesScreen(appVm, onBack = { nav.popBackStack() })
-                }
-                composable(Routes.SEARCH) {
-                    val searchVm: SearchViewModel = viewModel(factory = viewModelFactory {
-                        initializer { SearchViewModel(container.animeRepo) }
-                    })
-                    SearchScreen(appVm, searchVm, onOpenAnime = { nav.navigate(Routes.anime(it)) })
-                }
-                composable(Routes.RECS) {
-                    val recsVm: RecommendationsViewModel = viewModel(factory = viewModelFactory {
-                        initializer { RecommendationsViewModel(container.recommender) }
-                    })
-                    RecommendationsScreen(appVm, recsVm, onOpenAnime = { nav.navigate(Routes.anime(it)) })
-                }
-                composable(Routes.LIST_DETAIL) { entry ->
-                    val listId = entry.arguments?.getString("listId").orEmpty()
-                    ListDetailScreen(
-                        vm = appVm,
-                        listId = listId,
-                        onBack = { nav.popBackStack() },
-                        onOpenAnime = { nav.navigate(Routes.anime(it)) },
-                        onOpenMembers = { nav.navigate(Routes.listMembers(listId)) },
-                    )
-                }
-                composable(Routes.LIST_MEMBERS) { entry ->
-                    ListMembersScreen(
-                        vm = appVm,
-                        listId = entry.arguments?.getString("listId").orEmpty(),
-                        onBack = { nav.popBackStack() },
-                        // Dopo "Esci dalla lista" si torna alle liste, non al dettaglio di una lista non più nostra.
-                        onLeft = { nav.popBackStack(Routes.LISTS, inclusive = false) },
-                    )
-                }
-                composable(
-                    Routes.ANIME_DETAIL,
-                    arguments = listOf(navArgument("animeId") { type = NavType.IntType }),
-                ) { entry ->
-                    AnimeDetailScreen(
-                        vm = appVm,
-                        animeId = entry.arguments?.getInt("animeId") ?: 0,
-                        onBack = { nav.popBackStack() },
-                    )
-                }
-            }
+            },
+        ) {
+            UserAvatar(me?.photoUrl, size = 32.dp)
         }
     }
 }

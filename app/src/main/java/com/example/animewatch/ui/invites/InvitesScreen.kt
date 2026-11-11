@@ -1,5 +1,3 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
-
 package com.example.animewatch.ui.invites
 
 import androidx.compose.foundation.layout.Arrangement
@@ -11,20 +9,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -35,24 +27,16 @@ import com.example.animewatch.data.model.ListInvite
 import com.example.animewatch.data.model.ListRole
 import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.EmptyState
+import com.example.animewatch.ui.components.ScreenBar
 
 @Composable
-fun InvitesScreen(vm: AppViewModel, onBack: () -> Unit) {
+fun InvitesScreen(vm: AppViewModel) {
     val invites by vm.incomingInvites.collectAsStateWithLifecycle()
     val accepting by vm.accepting.collectAsStateWithLifecycle()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Inviti") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro")
-                    }
-                },
-            )
-        },
-    ) { padding ->
+    ScreenBar("Inviti")
+
+    Scaffold { padding ->
         if (invites.isEmpty()) {
             EmptyState(
                 "Nessun invito. Quando qualcuno condivide una lista con la tua email Google, la trovi qui.",

@@ -17,21 +17,28 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -55,26 +62,35 @@ fun roleLabel(role: ListRole): String = when (role) {
     ListRole.VIEWER -> "Sola visualizzazione"
 }
 
-/** Foto dell'account Google; se manca, l'iniziale del nome su un cerchio colorato. */
+/**
+ * Foto dell'account. Finché non è caricata, se non si carica (offline) o se l'account non ne ha una (un metodo di
+ * accesso diverso da Google potrebbe non fornirla) resta l'icona generica di una persona.
+ */
 @Composable
-fun MemberAvatar(name: String, photoUrl: String?, modifier: Modifier = Modifier) {
+fun UserAvatar(photoUrl: String?, modifier: Modifier = Modifier, size: Dp = 40.dp) {
+    var loaded by remember(photoUrl) { mutableStateOf(false) }
     Box(
         modifier
-            .size(40.dp)
+            .size(size)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.primaryContainer),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            name.firstOrNull()?.uppercase() ?: "?",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
-        if (photoUrl != null) {
+        if (!loaded) {
+            Icon(
+                Icons.Default.Person,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(size * 0.6f),
+            )
+        }
+        if (!photoUrl.isNullOrBlank()) {
             AsyncImage(
                 model = photoUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                onSuccess = { loaded = true },
+                onError = { loaded = false },
                 modifier = Modifier.matchParentSize(),
             )
         }

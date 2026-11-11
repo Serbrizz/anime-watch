@@ -22,6 +22,8 @@ data class UpdateState(
     /** Versione più recente disponibile, null se l'app è aggiornata (o non si è ancora controllato). */
     val available: AppRelease? = null,
     val dialogOpen: Boolean = false,
+    /** Controllo su GitHub in corso (anche quello automatico). */
+    val checking: Boolean = false,
     val downloading: Boolean = false,
     /** Frazione scaricata, null se non nota. */
     val progress: Float? = null,
@@ -31,7 +33,7 @@ data class UpdateState(
 /**
  * Controllo degli aggiornamenti: all'avvio e a ogni ritorno nell'app, ma al massimo ogni 6 ore dopo un controllo
  * riuscito (ogni 2 minuti dopo uno fallito, tipicamente offline). Il popup compare da solo una volta per versione;
- * dopo resta "Aggiorna" nel menu della schermata Liste.
+ * dopo resta "Aggiorna" nel Profilo.
  */
 class UpdateViewModel(private val updater: AppUpdater) : ViewModel() {
     private val _state = MutableStateFlow(UpdateState())
@@ -61,13 +63,16 @@ class UpdateViewModel(private val updater: AppUpdater) : ViewModel() {
     private fun check(manual: Boolean) {
         if (checkJob?.isActive == true) return
         checkJob = viewModelScope.launch {
+            _state.update { it.copy(checking = true) }
             val release = try {
                 updater.latestNewer().also { nextCheckAt = SystemClock.elapsedRealtime() + RECHECK_MS }
             } catch (e: CancellationException) {
+                _state.update { it.copy(checking = false) }
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "controllo aggiornamenti fallito", e)
                 nextCheckAt = SystemClock.elapsedRealtime() + RETRY_MS
+                _state.update { it.copy(checking = false) }
                 if (manual) _messages.tryEmit("Impossibile verificare gli aggiornamenti: sei connesso a Internet?")
                 return@launch
             }
@@ -78,7 +83,7 @@ class UpdateViewModel(private val updater: AppUpdater) : ViewModel() {
                     manual -> true
                     else -> s.dialogOpen || (isNew && release.version != updater.seenVersion)
                 }
-                s.copy(available = release ?: s.available.takeIf { s.downloading }, dialogOpen = open)
+                s.copy(available = release ?: s.available.takeIf { s.downloading }, dialogOpen = open, checking = false)
             }
             if (manual && release == null) _messages.tryEmit("Hai già l'ultima versione ($currentVersion).")
         }

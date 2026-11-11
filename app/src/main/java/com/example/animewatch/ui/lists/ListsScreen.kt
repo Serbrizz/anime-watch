@@ -1,9 +1,6 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
-
 package com.example.animewatch.ui.lists
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,24 +12,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Card
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,7 +26,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,23 +42,15 @@ import com.example.animewatch.data.model.Franchise
 import com.example.animewatch.data.model.ListRole
 import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.EmptyState
+import com.example.animewatch.ui.components.ScreenBar
 import com.example.animewatch.ui.components.roleLabel
-import com.example.animewatch.ui.update.UpdateViewModel
 
 @Composable
-fun ListsScreen(
-    vm: AppViewModel,
-    updateVm: UpdateViewModel,
-    onOpenList: (String) -> Unit,
-    onOpenInvites: () -> Unit,
-) {
+fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
     val lists by vm.lists.collectAsStateWithLifecycle()
     val progress by vm.progress.collectAsStateWithLifecycle()
     val animeMap by vm.anime.collectAsStateWithLifecycle()
-    val invites by vm.incomingInvites.collectAsStateWithLifecycle()
     val me by vm.user.collectAsStateWithLifecycle()
-    val update by updateVm.state.collectAsStateWithLifecycle()
-    var menuOpen by remember { mutableStateOf(false) }
     var showCreate by rememberSaveable { mutableStateOf(false) }
     var toDelete by remember { mutableStateOf<AnimeList?>(null) }
 
@@ -83,62 +59,19 @@ fun ListsScreen(
     // Servono tutte le stagioni di ogni serie per sapere quante sono davvero concluse.
     LaunchedEffect(lists) { vm.ensureFranchises(lists.flatMap { it.animeIds }) }
 
+    ScreenBar("Le mie liste")
+
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Le mie liste") },
-                actions = {
-                    IconButton(onClick = onOpenInvites) {
-                        BadgedBox(badge = { if (invites.isNotEmpty()) Badge { Text("${invites.size}") } }) {
-                            Icon(Icons.Default.Email, contentDescription = "Inviti")
-                        }
-                    }
-                    Box {
-                        IconButton(onClick = { menuOpen = true }) {
-                            BadgedBox(badge = { if (update.available != null) Badge() }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "Altre opzioni")
-                            }
-                        }
-                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            val available = update.available
-                            if (available != null) {
-                                DropdownMenuItem(
-                                    text = { Text("Aggiorna alla versione ${available.version}") },
-                                    leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
-                                    onClick = { menuOpen = false; updateVm.openDialog() },
-                                )
-                            } else {
-                                DropdownMenuItem(
-                                    text = { Text("Verifica aggiornamenti") },
-                                    leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
-                                    onClick = { menuOpen = false; updateVm.checkNow() },
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text("Esci dall'account") },
-                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null) },
-                                onClick = { menuOpen = false; vm.signOut() },
-                            )
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text("AnimeWatch ${updateVm.currentVersion}") },
-                                onClick = {},
-                                enabled = false,
-                            )
-                        }
-                    }
-                },
-            )
-        },
         floatingActionButton = {
             FloatingActionButton(onClick = { showCreate = true }) {
                 Icon(Icons.Default.Add, contentDescription = "Nuova lista")
             }
         },
     ) { padding ->
-        if (lists.isEmpty() && invites.isEmpty()) {
+        if (lists.isEmpty()) {
             EmptyState(
-                "Nessuna lista. Tocca + per crearne una, poi aggiungi anime dalla scheda Cerca.",
+                "Nessuna lista. Tocca + per crearne una, poi aggiungi anime dalla scheda Cerca. " +
+                    "Gli inviti alle liste condivise li trovi nel Profilo, in alto a destra.",
                 Modifier.padding(padding),
             )
         } else {
@@ -147,25 +80,6 @@ fun ListsScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (invites.isNotEmpty()) {
-                    item(key = "invites") {
-                        Card(
-                            onClick = onOpenInvites,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Email, contentDescription = null)
-                                Spacer(Modifier.width(12.dp))
-                                Text(
-                                    if (invites.size == 1) "Hai un invito a una lista condivisa"
-                                    else "Hai ${invites.size} inviti a liste condivise",
-                                    style = MaterialTheme.typography.titleSmall,
-                                )
-                            }
-                        }
-                    }
-                }
                 items(lists, key = { it.id }) { list ->
                     val groups = Franchise.groupList(list.animeIds, franchises)
                     val seen = groups.flatMap { it.seasonIds }.count { id ->

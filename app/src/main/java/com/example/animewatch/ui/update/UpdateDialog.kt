@@ -56,7 +56,7 @@ fun UpdateDialog(state: UpdateState, currentVersion: String, onInstall: () -> Un
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "Puoi aggiornare anche più tardi dal menu della schermata Liste.",
+                    "Puoi aggiornare anche più tardi dal Profilo, in alto a destra.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AssistChip
@@ -31,13 +30,11 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,10 +54,11 @@ import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.AddToListDialog
 import com.example.animewatch.ui.components.CoverImage
 import com.example.animewatch.ui.components.EmptyState
+import com.example.animewatch.ui.components.ScreenBar
 import com.example.animewatch.ui.components.statusLabel
 
 @Composable
-fun AnimeDetailScreen(vm: AppViewModel, animeId: Int, onBack: () -> Unit) {
+fun AnimeDetailScreen(vm: AppViewModel, animeId: Int) {
     val animeMap by vm.anime.collectAsStateWithLifecycle()
     val progress by vm.progress.collectAsStateWithLifecycle()
     val franchises by vm.franchises.collectAsStateWithLifecycle()
@@ -77,24 +75,9 @@ fun AnimeDetailScreen(vm: AppViewModel, animeId: Int, onBack: () -> Unit) {
         vm.ensureFranchises(listOf(animeId))
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        seasons.firstOrNull()?.englishOrRomaji ?: anime?.englishOrRomaji ?: "",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro")
-                    }
-                },
-            )
-        },
-    ) { padding ->
+    ScreenBar(seasons.firstOrNull()?.englishOrRomaji ?: anime?.englishOrRomaji ?: "")
+
+    Scaffold { padding ->
         if (anime == null) {
             EmptyState("Caricamento…", Modifier.padding(padding))
             return@Scaffold

@@ -19,7 +19,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +32,7 @@ import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.AddToListDialog
 import com.example.animewatch.ui.components.AnimeRow
 import com.example.animewatch.ui.components.EmptyState
+import com.example.animewatch.ui.components.ScreenBar
 
 @Composable
 fun SearchScreen(
@@ -43,7 +43,9 @@ fun SearchScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     var addTarget by remember { mutableStateOf<Anime?>(null) }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Cerca anime") }) }) { padding ->
+    ScreenBar("Cerca anime")
+
+    Scaffold { padding ->
         Column(Modifier.padding(padding)) {
             OutlinedTextField(
                 value = state.query,

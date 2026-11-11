@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
@@ -33,7 +32,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,12 +49,13 @@ import com.example.animewatch.data.model.ListInvite
 import com.example.animewatch.data.model.ListRole
 import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.EmptyState
-import com.example.animewatch.ui.components.MemberAvatar
+import com.example.animewatch.ui.components.ScreenBar
+import com.example.animewatch.ui.components.UserAvatar
 import com.example.animewatch.ui.components.roleLabel
 import kotlinx.coroutines.flow.flowOf
 
 @Composable
-fun ListMembersScreen(vm: AppViewModel, listId: String, onBack: () -> Unit, onLeft: () -> Unit) {
+fun ListMembersScreen(vm: AppViewModel, listId: String, onLeft: () -> Unit) {
     val lists by vm.lists.collectAsStateWithLifecycle()
     val me by vm.user.collectAsStateWithLifecycle()
     val list = lists.firstOrNull { it.id == listId }
@@ -65,18 +64,9 @@ fun ListMembersScreen(vm: AppViewModel, listId: String, onBack: () -> Unit, onLe
         .collectAsStateWithLifecycle(emptyList())
     var confirmLeave by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(list?.name?.let { "Condivisione · $it" } ?: "Condivisione") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro")
-                    }
-                },
-            )
-        },
-    ) { padding ->
+    ScreenBar(list?.name?.let { "Condivisione · $it" } ?: "Condivisione")
+
+    Scaffold { padding ->
         if (list == null) {
             EmptyState("Lista non trovata.", Modifier.padding(padding))
             return@Scaffold
@@ -173,7 +163,7 @@ private fun InviteForm(myEmail: String, onSend: (email: String, role: ListRole) 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionTitle("Invita qualcuno")
         Text(
-            "Scrivi l'email dell'account Google della persona: l'invito comparirà nella sua sezione Inviti.",
+            "Scrivi l'email dell'account Google della persona: l'invito comparirà fra gli inviti del suo Profilo.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -247,7 +237,7 @@ private fun MemberRow(
     var menu by remember { mutableStateOf(false) }
 
     Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        MemberAvatar(name, profile?.photoUrl)
+        UserAvatar(profile?.photoUrl)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(if (isMe) "$name (tu)" else name, style = MaterialTheme.typography.bodyLarge)

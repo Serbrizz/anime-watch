@@ -23,13 +23,16 @@ anime consigliati in base ai generi già guardati. Dati anime da AniList, dati u
 7. **Offline.** Liste e progressi si leggono e si modificano anche senza rete (cache locale di Firestore) e si sincronizzano dopo.
 8. **Accesso.** Solo con account Google, da una schermata di login al primo avvio; la sessione resta finché l'utente non tocca "Esci".
 9. **Liste condivise.** Il proprietario invita una persona scrivendo l'email del suo account Google e scegliendo
-   *modifica* (aggiunge/toglie anime) o *visualizzazione* (sola lettura). L'invito compare nella sezione **Inviti**
+   *modifica* (aggiunge/toglie anime) o *visualizzazione* (sola lettura). L'invito compare negli **Inviti** del Profilo
    del destinatario, che lo accetta o lo rifiuta; non scade, resta finché non viene accettato, rifiutato o ritirato.
    Accettata, la lista sta fra le sue con un contrassegno "Condivisa". Il progresso resta personale (punto 4):
    ognuno vede le proprie puntate. Ruoli e permessi in §5.
 10. **Aggiornamenti.** L'app si installa a mano (niente Play Store) e si aggiorna da sola dalle release GitHub (§13):
    all'uscita di una versione mostra una volta il popup "Nuova versione disponibile" con le note di tutte le versioni mancanti; poi resta
-   "Aggiorna alla versione X" nel menu della schermata Liste, che mostra anche la versione installata.
+   il pulsante "Aggiorna" nel Profilo, dove la pagina Aggiornamenti mostra versione installata e versione nuova.
+11. **Profilo.** In alto a destra di ogni schermata, la foto dell'account (un'icona generica se manca o non si carica)
+   apre il Profilo: nome ed email, Inviti, Aggiornamenti, "Esci dall'account". Sulla foto, il numero di inviti in attesa
+   o un pallino se c'è un aggiornamento.
 
 Fuori scopo per ora: notifiche sulle nuove puntate (anche per gli inviti), streaming/link ai player, social oltre alle
 liste condivise (commenti, profili pubblici), tracciamento dei voti personali, trasferimento della proprietà di una lista.
@@ -97,9 +100,10 @@ app/src/main/java/com/example/animewatch/
 └─ ui/
    ├─ AnimeWatchRoot.kt        login se non c'è utente, altrimenti NavHost + bottom bar + banner errori
    ├─ AppViewModel.kt          utente, liste, inviti, progressi, cache schede, azioni
-   ├─ components/Common.kt     AnimeRow, CoverImage, MemberAvatar, AddToListDialog, EmptyState, etichette
-   ├─ login/  lists/  invites/  detail/  search/  recs/   una cartella per schermata
-   ├─ update/                  UpdateViewModel (quando controllare, popup una volta per versione), UpdateDialog
+   ├─ components/Common.kt     AnimeRow, CoverImage, UserAvatar, AddToListDialog, EmptyState, etichette
+   ├─ components/ScreenBar.kt  titolo e azioni che ogni schermata dichiara per la barra in alto comune
+   ├─ login/  lists/  invites/  detail/  search/  recs/  profile/   una cartella per schermata
+   ├─ update/                  UpdateViewModel (quando controllare, popup una volta per versione), UpdateDialog, UpdatesScreen
    └─ theme/Theme.kt
 
 proxy/                          Cloudflare Worker "animewatch-ai" (fuori dall'app, deploy con wrangler)
@@ -117,11 +121,14 @@ importare nulla di Android (resta testabile sulla JVM).
 | Rotta | Contenuto |
 |---|---|
 | — (login) | Fuori dal NavHost: logo, pulsante "Accedi con Google", errore. Compare finché non c'è un utente |
-| `lists` | Elenco liste (n. anime, n. stagioni viste, contrassegno "Condivisa"), FAB "nuova lista", elimina (proprietario) o esci (altri) con conferma; nella barra "Inviti" con contatore e un menu (pallino se c'è un aggiornamento): "Verifica aggiornamenti" / "Aggiorna alla versione X", "Esci dall'account", versione installata |
+| — (barra in alto) | Una sola, in `AnimeWatchRoot`: titolo e azioni dalla schermata (`ScreenBar`), freccia indietro fuori dalle sezioni della barra in basso, foto del profilo a destra tranne che nelle pagine `profile…` |
+| `lists` | Elenco liste (n. anime, n. stagioni viste, contrassegno "Condivisa"), FAB "nuova lista", elimina (proprietario) o esci (altri) con conferma |
+| `profile` | Foto, nome, email; "Inviti" (quanti in attesa), "Aggiornamenti" (versione installata, "Aggiorna" se ce n'è una nuova), "Esci dall'account" con conferma |
+| `profile/updates` | Versione installata e nuova; "Aggiorna alla versione X" (apre il popup) oppure "Verifica aggiornamenti" |
 | — (aggiornamento) | Popup fuori dal NavHost, anche sul login: versione nuova, note della release, avanzamento del download; "Aggiorna ora" / "Più tardi" |
 | `list/{listId}` | Una riga per serie (copertina della S1): stagioni viste su totali, puntate e barra della stagione corrente, spunta se tutte viste; il tocco apre la stagione corrente; rimuovi (tutte le stagioni) solo con permesso di modifica; icona condivisione |
 | `list/{listId}/members` | Membri con ruolo. Proprietario: invito per email + ruolo, inviti in attesa da ritirare, cambia ruolo / rimuovi membro. Altri: "Esci dalla lista" |
-| `invites` | Inviti ricevuti: lista, chi invita, ruolo; "Accetta" / "Rifiuta" |
+| `profile/invites` | Inviti ricevuti: lista, chi invita, ruolo; "Accetta" / "Rifiuta" |
 | `anime/{animeId}` | Copertina, generi, trama, "Aggiungi a una lista" (aggiunge la serie), sotto il menu a tendina "Stagione" (se più d'una: etichetta, titolo, spunta sulle viste), griglia di chip per puntata, "Segna tutte"/"Azzera" |
 | `search` | Campo di ricerca, risultati con "+" per aggiungere a una lista |
 | `recs` | Generi dominanti, interruttore "Affina con AI" (solo se la chiave c'è), elenco con affinità % e motivo |

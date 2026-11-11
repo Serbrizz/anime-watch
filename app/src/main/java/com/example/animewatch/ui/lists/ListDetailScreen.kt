@@ -1,5 +1,3 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
-
 package com.example.animewatch.ui.lists
 
 import androidx.compose.foundation.layout.PaddingValues
@@ -8,11 +6,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -20,7 +16,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,6 +28,7 @@ import com.example.animewatch.data.model.Franchise
 import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.AnimeRow
 import com.example.animewatch.ui.components.EmptyState
+import com.example.animewatch.ui.components.ScreenBar
 
 /**
  * Una serie nella lista: copertina e titolo della prima stagione, avanzamento della stagione in corso.
@@ -98,7 +94,6 @@ private fun FranchiseRow(
 fun ListDetailScreen(
     vm: AppViewModel,
     listId: String,
-    onBack: () -> Unit,
     onOpenAnime: (Int) -> Unit,
     onOpenMembers: () -> Unit,
 ) {
@@ -114,25 +109,15 @@ fun ListDetailScreen(
 
     LaunchedEffect(list?.animeIds) { list?.let { vm.ensureFranchises(it.animeIds) } }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(list?.name ?: "Lista") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro")
-                    }
-                },
-                actions = {
-                    if (list != null) {
-                        IconButton(onClick = onOpenMembers) {
-                            Icon(Icons.Default.Share, contentDescription = "Condivisione e membri")
-                        }
-                    }
-                },
-            )
-        },
-    ) { padding ->
+    ScreenBar(list?.name ?: "Lista") {
+        if (list != null) {
+            IconButton(onClick = onOpenMembers) {
+                Icon(Icons.Default.Share, contentDescription = "Condivisione e membri")
+            }
+        }
+    }
+
+    Scaffold { padding ->
         when {
             // Succede anche quando il proprietario la elimina o ci rimuove mentre siamo qui.
             list == null -> EmptyState("Lista non trovata.", Modifier.padding(padding))

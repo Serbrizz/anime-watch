@@ -20,7 +20,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +37,7 @@ import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.AddToListDialog
 import com.example.animewatch.ui.components.AnimeRow
 import com.example.animewatch.ui.components.EmptyState
+import com.example.animewatch.ui.components.ScreenBar
 import kotlin.math.roundToInt
 
 @Composable
@@ -71,18 +71,13 @@ fun RecommendationsScreen(
     // ogni calcolo costa richieste ad AniList.
     LaunchedEffect(topGenres, useLlm) { reload() }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Consigliati") },
-                actions = {
-                    IconButton(onClick = { reload() }, enabled = topGenres.isNotEmpty()) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Aggiorna")
-                    }
-                },
-            )
-        },
-    ) { padding ->
+    ScreenBar("Consigliati") {
+        IconButton(onClick = { reload() }, enabled = topGenres.isNotEmpty()) {
+            Icon(Icons.Default.Refresh, contentDescription = "Aggiorna")
+        }
+    }
+
+    Scaffold { padding ->
         Column(Modifier.padding(padding)) {
             if (topGenres.isEmpty()) {
                 EmptyState("Segna qualche puntata come vista: i consigli si basano sui generi che guardi.")

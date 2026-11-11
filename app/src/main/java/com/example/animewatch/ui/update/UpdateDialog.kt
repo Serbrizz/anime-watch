@@ -32,9 +32,14 @@ fun UpdateDialog(state: UpdateState, currentVersion: String, onInstall: () -> Un
                     "È disponibile AnimeWatch ${release.version} (stai usando la $currentVersion). " +
                         "L'app scaricherà l'aggiornamento e aprirà l'installazione di Android.$size"
                 )
-                if (release.notes.isNotBlank()) {
+                // Le note di ogni versione saltata, dalla più recente: si vede tutto ciò che cambia, non solo l'ultima.
+                release.changes.filter { it.notes.isNotBlank() }.forEach { change ->
                     Spacer(Modifier.height(12.dp))
-                    Text(release.notes, style = MaterialTheme.typography.bodySmall)
+                    if (release.changes.size > 1) {
+                        Text("Versione ${change.version}", style = MaterialTheme.typography.titleSmall)
+                        Spacer(Modifier.height(4.dp))
+                    }
+                    Text(change.notes, style = MaterialTheme.typography.bodySmall)
                 }
                 if (busy) {
                     Spacer(Modifier.height(16.dp))

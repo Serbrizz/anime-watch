@@ -28,7 +28,7 @@ anime consigliati in base ai generi già guardati. Dati anime da AniList, dati u
    Accettata, la lista sta fra le sue con un contrassegno "Condivisa". Il progresso resta personale (punto 4):
    ognuno vede le proprie puntate. Ruoli e permessi in §5.
 10. **Aggiornamenti.** L'app si installa a mano (niente Play Store) e si aggiorna da sola dalle release GitHub (§13):
-   all'uscita di una versione mostra una volta il popup "Nuova versione disponibile" con le note; poi resta
+   all'uscita di una versione mostra una volta il popup "Nuova versione disponibile" con le note di tutte le versioni mancanti; poi resta
    "Aggiorna alla versione X" nel menu della schermata Liste, che mostra anche la versione installata.
 
 Fuori scopo per ora: notifiche sulle nuove puntate (anche per gli inviti), streaming/link ai player, social oltre alle
@@ -89,7 +89,7 @@ app/src/main/java/com/example/animewatch/
 │  ├─ remote/
 │  │  ├─ anilist/              AniListApi (1 endpoint POST), AniListClient (query), DTO
 │  │  └─ openrouter/           OpenRouterApi (chat/completions, tramite il proxy)
-│  └─ update/                  AppUpdater (release GitHub, download, installer), GitHubApi, AppVersion (puro, testato)
+│  └─ update/                  AppUpdater (release GitHub, download, installer), GitHubApi, AppVersion e PendingReleases (puri, testati)
 ├─ domain/
 │  ├─ RecommendationEngine     profilo generi + coseno (puro, testato)
 │  ├─ RecommendationService    candidati da AniList -> ranking -> riordino AI opzionale
@@ -217,9 +217,11 @@ mette sempre la relazione inversa, quindi il raggruppamento la tratta come non o
 Il modello riceve una **lista chiusa** di 30 candidati reali e deve restituire un array JSON `[{id, reason}]`:
 non può inventare titoli. Ogni anomalia (rete, JSON non valido, ID sconosciuti) => `null` => si usa l'algoritmo.
 
-**GitHub** — `GET https://api.github.com/repos/<appReleaseRepo>/releases/latest`, senza token (limite 60 richieste/ora
+**GitHub** — `GET https://api.github.com/repos/<appReleaseRepo>/releases?per_page=30`, senza token (limite 60 richieste/ora
 per IP; l'app ne fa una ogni 6 ore): funziona solo se il repository è **pubblico**. Con un repository privato risponde
-404 e l'app crede semplicemente che non ci siano release. L'APK si scarica da `browser_download_url` dell'allegato.
+404 e l'app crede semplicemente che non ci siano release. Si usa l'elenco e non `releases/latest` perché servono le note
+di tutte le versioni saltate; bozze e pre-release si scartano nel client. L'APK si scarica da `browser_download_url`
+dell'allegato dell'ultima.
 
 ## 7. Algoritmo dei consigliati
 
@@ -374,6 +376,9 @@ poteri e limiti del proprietario, eliminazione, migrazione). Il test non è nel 
   autenticata con permesso di push (`gh auth login`).
   1. Controlla branch pulito e allineato a origin, `dev` già unito, tag libero e `:app:verifyReleaseConfig`.
      Poi apre il Blocco note per le note di rilascio, che compaiono nel popup dell'app.
+     **Le note sono per chi usa l'app**, anche quando le scrive Claude: cosa cambia per l'utente, in italiano, testo
+     semplice con trattini (il popup non interpreta il Markdown). Niente dettagli di sviluppo (script, test, CI, regole
+     Firestore, refactoring, nomi di file o classi) né indicazioni per lo sviluppatore.
   2. Incrementa `appVersion`.
   3. Lancia gli unit test e `assembleRelease`, copia in `build\release\AnimeWatch.apk` e controlla la firma con apksigner.
   4. Dopo conferma: commit, tag annotato `vX.Y.Z` e push atomico di `main` e tag.
@@ -382,8 +387,10 @@ poteri e limiti del proprietario, eliminazione, migrazione). Il test non è nel 
   6. Porta `dev` (locale e origin) al commit di release, se è un avanzamento semplice.
   Se fallisce prima del commit, rimette `gradle.properties` e `build\release` com'erano.
 - **Nell'app** (`AppUpdater` + `UpdateViewModel`): il controllo avviene all'avvio e a ogni ritorno nell'app, al massimo
-  ogni 6 ore dopo un controllo riuscito o ogni 2 minuti dopo uno fallito. Si confronta il tag dell'ultima release con
-  `BuildConfig.VERSION_NAME`. Il popup compare una volta per versione (`seenVersion` nelle SharedPreferences "update").
+  ogni 6 ore dopo un controllo riuscito o ogni 2 minuti dopo uno fallito. Si confrontano i tag delle release con
+  `BuildConfig.VERSION_NAME` (`PendingReleases`, puro e testato): si propone l'ultima, se allega l'APK, e il popup mostra
+  le note di **tutte** le versioni successive a quella installata, dalla più recente (al massimo le ultime 30 release).
+  Il popup compare una volta per versione (`seenVersion` nelle SharedPreferences "update").
   L'APK si scarica in `files/update/` (file `.part`, verificato, poi rinominato) e si apre l'installer via FileProvider
   (`res/xml/update_paths.xml`). La prima volta Android chiede il permesso "installa app sconosciute" e l'installer parte
   al ritorno nell'app. Il vecchio APK si cancella all'avvio successivo.

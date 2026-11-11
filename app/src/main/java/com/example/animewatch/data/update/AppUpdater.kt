@@ -17,7 +17,8 @@ import java.security.MessageDigest
 /** Una versione più recente di quella installata, con l'APK da scaricare. */
 data class AppRelease(
     val version: String,
-    val notes: String,
+    /** Note di tutte le versioni mancanti, dalla più recente ([version]) a quella subito dopo l'installata. */
+    val changes: List<ReleaseNotes>,
     val apkUrl: String,
     val size: Long,
     /** sha256 esadecimale dell'APK, se GitHub lo fornisce. */
@@ -59,19 +60,22 @@ class AppUpdater(
         get() = prefs.getString(KEY_SEEN, null)
         set(value) = prefs.edit().putString(KEY_SEEN, value).apply()
 
-    /** La release più recente se è successiva a quella installata e allega l'APK; null se l'app è aggiornata. */
+    /**
+     * La release più recente se è successiva a quella installata e allega l'APK, con le note di tutte le versioni
+     * saltate (al massimo le ultime 30 release); null se l'app è aggiornata.
+     */
     suspend fun latestNewer(): AppRelease? {
         val (owner, name) = repo.split('/', limit = 2)
-        val response = api.latestRelease(owner, name)
-        if (response.code() == 404) return null // nessuna release pubblicata
+        val response = api.releases(owner, name)
+        if (response.code() == 404) return null // repository privato o inesistente: per l'app nessuna release
         if (!response.isSuccessful) throw IOException("GitHub ha risposto HTTP ${response.code()}")
-        val release = response.body() ?: throw IOException("risposta di GitHub vuota")
-        val version = release.tagName.trim().removePrefix("v")
-        if (!AppVersion.isNewer(version, currentVersion)) return null
-        val apk = release.assets.firstOrNull { it.name.equals(ASSET_NAME, ignoreCase = true) } ?: return null
+        val all = response.body() ?: throw IOException("risposta di GitHub vuota")
+        val newer = PendingReleases.newerThan(all, currentVersion, ASSET_NAME)
+        val release = newer.firstOrNull() ?: return null
+        val apk = release.assets.first { it.name.equals(ASSET_NAME, ignoreCase = true) }
         return AppRelease(
-            version = version,
-            notes = release.body.orEmpty().trim(),
+            version = PendingReleases.versionOf(release),
+            changes = newer.map { ReleaseNotes(PendingReleases.versionOf(it), it.body.orEmpty().trim()) },
             apkUrl = apk.url,
             size = apk.size,
             sha256 = apk.digest?.takeIf { it.startsWith("sha256:") }?.removePrefix("sha256:"),

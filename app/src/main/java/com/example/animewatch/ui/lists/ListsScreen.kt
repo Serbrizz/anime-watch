@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -115,7 +116,8 @@ fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
                                     val color = MaterialTheme.colorScheme.onSurfaceVariant
                                     Text("${groups.size} anime · ", style = style, color = color)
                                     if (loading) {
-                                        Box(Modifier.size(width = 110.dp, height = 14.dp).skeleton())
+                                        CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                                        Text(" stagioni viste", style = style, color = color)
                                     } else {
                                         Text("$seen stagioni viste", style = style, color = color)
                                     }

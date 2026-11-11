@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.FilledTonalButton
@@ -37,13 +38,14 @@ import com.example.animewatch.ui.components.ScreenBar
 import com.example.animewatch.ui.components.UserAvatar
 import com.example.animewatch.ui.update.UpdateViewModel
 
-/** Account (foto, nome, email), inviti ricevuti, aggiornamenti dell'app e uscita. */
+/** Account (foto, nome, email), inviti ricevuti, aggiornamenti, informazioni sull'app e uscita. */
 @Composable
 fun ProfileScreen(
     appVm: AppViewModel,
     updateVm: UpdateViewModel,
     onOpenInvites: () -> Unit,
     onOpenUpdates: () -> Unit,
+    onOpenInfo: () -> Unit,
 ) {
     val me by appVm.user.collectAsStateWithLifecycle()
     val invites by appVm.incomingInvites.collectAsStateWithLifecycle()
@@ -100,13 +102,19 @@ fun ProfileScreen(
                     else "Versione ${updateVm.currentVersion}"
                 )
             },
-            leadingContent = { Icon(Icons.Default.Info, contentDescription = null) },
+            leadingContent = { Icon(Icons.Default.Refresh, contentDescription = null) },
             trailingContent = {
                 if (available != null) {
                     FilledTonalButton(onClick = updateVm::openDialog) { Text("Aggiorna") }
                 }
             },
             modifier = Modifier.clickable(onClick = onOpenUpdates),
+        )
+        ListItem(
+            headlineContent = { Text("Informazioni") },
+            supportingContent = { Text("Versione e fonti dei dati: AniList, TMDB, Gemini") },
+            leadingContent = { Icon(Icons.Default.Info, contentDescription = null) },
+            modifier = Modifier.clickable(onClick = onOpenInfo),
         )
         HorizontalDivider()
 

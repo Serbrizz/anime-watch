@@ -38,7 +38,7 @@ anime consigliati in base ai generi già guardati. Dati anime da AniList, dati u
    all'uscita di una versione mostra una volta il popup "Nuova versione disponibile" con le note di tutte le versioni mancanti; poi resta
    il pulsante "Aggiorna" nel Profilo, dove la pagina Aggiornamenti mostra versione installata e versione nuova.
 11. **Profilo.** In alto a destra di ogni schermata, la foto dell'account (un'icona generica se manca o non si carica)
-   apre il Profilo: nome ed email, Inviti, Aggiornamenti, "Esci dall'account". Sulla foto, il numero di inviti in attesa
+   apre il Profilo: nome ed email, Inviti, Aggiornamenti, Informazioni (versione e fonti dei dati), "Esci dall'account". Sulla foto, il numero di inviti in attesa
    o un pallino se c'è un aggiornamento.
 
 Fuori scopo per ora: notifiche sulle nuove puntate (anche per gli inviti), streaming/link ai player, social oltre alle
@@ -138,7 +138,7 @@ app/src/main/java/com/example/animewatch/
    ├─ components/Skeleton.kt   skeleton di attesa: forma pulsante, righe di testo, righe di anime
    ├─ components/AddToListSheet.kt  pannello dal basso "Aggiungi a una lista" (anche crea una lista con l'anime dentro)
    ├─ components/ScreenBar.kt  titolo e azioni che ogni schermata dichiara per la barra in alto comune
-   ├─ login/  lists/  invites/  detail/  search/  recs/  profile/   una cartella per schermata
+   ├─ login/  lists/  invites/  detail/  search/  recs/  profile/   una cartella per schermata (profile/ ha anche InfoScreen)
    ├─ update/                  UpdateViewModel (quando controllare, popup una volta per versione), UpdateDialog, UpdatesScreen
    └─ theme/Theme.kt
 
@@ -162,7 +162,8 @@ importare nulla di Android (resta testabile sulla JVM).
 | — (barra in alto) | Una sola, in `AnimeWatchRoot`: titolo e azioni dalla schermata (`ScreenBar`), freccia indietro fuori dalle sezioni della barra in basso, foto del profilo a destra tranne che nelle pagine `profile…` |
 | — (barra in basso) | Liste, Cerca, Consigliati su ogni schermata tranne le pagine `profile…`. È accesa la sezione da cui si è arrivati (l'ultima radice nello stack); ogni sezione conserva il proprio stack, e ritoccare quella attiva riporta alla sua radice |
 | `lists` | Skeleton finché non arriva la prima lettura delle liste (il messaggio "Nessuna lista" solo dopo). Elenco liste (n. anime, n. stagioni viste, contrassegno "Condivisa"; al posto del numero di stagioni viste uno skeleton finché le serie della lista non sono tutte ricostruite o fallite), FAB "nuova lista", elimina (proprietario) o esci (altri) con conferma |
-| `profile` | Foto, nome, email; "Inviti" (quanti in attesa), "Aggiornamenti" (versione installata, "Aggiorna" se ce n'è una nuova), "Esci dall'account" con conferma |
+| `profile` | Foto, nome, email; "Inviti" (quanti in attesa), "Aggiornamenti" (versione installata, "Aggiorna" se ce n'è una nuova), "Informazioni", "Esci dall'account" con conferma |
+| `profile/info` | Icona, nome e versione dell'app; "Fonti dei dati": una scheda per AniList, TMDB e Gemini con logo, nome, ruolo e descrizione, che apre il sito (per TMDB anche la frase richiesta dai suoi termini d'uso) |
 | `profile/updates` | Versione installata e nuova; "Aggiorna alla versione X" (apre il popup) oppure "Verifica aggiornamenti" |
 | — (aggiornamento) | Popup fuori dal NavHost, anche sul login: versione nuova, note della release, avanzamento del download; "Aggiorna ora" / "Più tardi" |
 | `list/{listId}` | Una riga per serie (copertina della S1): stagioni viste su totali, puntate e barra della stagione corrente, spunta se tutte viste; il tocco apre la stagione corrente; rimuovi (tutte le stagioni) e pulsante "Aggiungi anime" solo con permesso di modifica; icona condivisione |
@@ -285,7 +286,8 @@ supera i 400 KB): la ricerca a `{id, name, originalName, firstAirDate, genreIds,
 vote}]}]}`. Per avere tutte le stagioni con una chiamata usa `append_to_response=season/0,…,season/19` (TMDB ne accetta 20
 e ignora quelle che non esistono); oltre la 19 (One Piece) ne fa altre. Le miniature: `https://image.tmdb.org/t/p/w300` +
 `still`. `vote` è null se nessuno ha votato. Gli errori di TMDB tornano come 404 (serie inesistente) o 502.
-Termini d'uso: uso non commerciale gratuito, con logo e citazione nell'app.
+Termini d'uso: uso non commerciale gratuito, con logo e citazione nell'app (Profilo -> Informazioni; il logo è
+`res/drawable/tmdb_logo_square.xml`, convertito dallo SVG ufficiale `blue_square_2` di themoviedb.org/about/logos-attribution).
 
 **Gemini, tramite il proxy** — l'app parla il formato chat/completions di OpenAI: `POST <aiProxyUrl>chat/completions`
 con header `Authorization: Bearer <ID token Firebase dell'utente>` e corpo `{messages, temperature, response_format}`,
@@ -483,7 +485,7 @@ Verificato (11/11/2026):
   di rete restano fuori.
 - Puntate da TMDB su dispositivo, col proxy e le regole pubblicati: Frieren S2 (le puntate 29-38 di TMDB rinumerate da 1,
   titoli italiani, 23 min, voti), Fire Force S1 e S2 (trama italiana della stagione), Chainsaw Man aperto per la prima
-  volta (skeleton, poi direttamente la trama italiana); skeleton di Cerca.
+  volta (skeleton, poi direttamente la trama italiana); skeleton di Cerca; pagina Informazioni coi loghi.
 
 Da verificare:
 1. Su dispositivo, con due account Google: invito, accettazione, rifiuto, sola visualizzazione, uscita, modalità aereo.

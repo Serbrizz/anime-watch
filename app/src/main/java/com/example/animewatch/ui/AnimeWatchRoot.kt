@@ -62,6 +62,7 @@ import com.example.animewatch.ui.lists.ListDetailScreen
 import com.example.animewatch.ui.lists.ListMembersScreen
 import com.example.animewatch.ui.lists.ListsScreen
 import com.example.animewatch.ui.login.LoginScreen
+import com.example.animewatch.ui.profile.InfoScreen
 import com.example.animewatch.ui.profile.ProfileScreen
 import com.example.animewatch.ui.recs.RecommendationsScreen
 import com.example.animewatch.ui.recs.RecommendationsViewModel
@@ -84,6 +85,7 @@ private object Routes {
     const val PROFILE = "profile"
     const val INVITES = "profile/invites"
     const val UPDATES = "profile/updates"
+    const val INFO = "profile/info"
     fun list(id: String) = "list/$id"
     fun listMembers(id: String) = "list/$id/members"
     fun listSearch(id: String) = "list/$id/search"
@@ -228,8 +230,10 @@ private fun MainContent(container: AppContainer, appVm: AppViewModel, updateVm: 
                             updateVm,
                             onOpenInvites = { nav.navigate(Routes.INVITES) },
                             onOpenUpdates = { nav.navigate(Routes.UPDATES) },
+                            onOpenInfo = { nav.navigate(Routes.INFO) },
                         )
                     }
+                    composable(Routes.INFO) { InfoScreen() }
                     composable(Routes.INVITES) { InvitesScreen(appVm) }
                     composable(Routes.UPDATES) { UpdatesScreen(updateVm) }
                     composable(Routes.SEARCH) {

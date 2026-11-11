@@ -36,7 +36,17 @@ data class MediaDto(
     val relations: RelationsDto? = null,
     /** Utenti che lo hanno in lista su AniList. Solo per ordinare la ricerca: non entra in [Anime]. */
     val popularity: Int? = null,
+    /** Date di uscita, per trovare le puntate su TMDB. Solo nella query [AniListClient.seasonDates]. */
+    val startDate: FuzzyDateDto? = null,
+    val endDate: FuzzyDateDto? = null,
 )
+
+/** Data di AniList: mese e giorno mancano per le uscite annunciate. */
+@Serializable
+data class FuzzyDateDto(val year: Int? = null, val month: Int? = null, val day: Int? = null) {
+    /** `yyyy-MM-dd`, solo se la data è completa. */
+    fun iso(): String? = if (year != null && month != null && day != null) "%04d-%02d-%02d".format(year, month, day) else null
+}
 
 @Serializable
 data class RelationsDto(val edges: List<RelationEdgeDto> = emptyList())

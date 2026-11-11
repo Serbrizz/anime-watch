@@ -2,6 +2,8 @@ package com.example.animewatch.data.firebase
 
 import com.example.animewatch.data.model.Anime
 import com.example.animewatch.data.model.AnimeList
+import com.example.animewatch.data.model.Episode
+import com.example.animewatch.data.model.SeasonEpisodes
 import com.example.animewatch.data.model.ListInvite
 import com.example.animewatch.data.model.ListRole
 import com.example.animewatch.data.model.MemberProfile
@@ -70,6 +72,57 @@ fun DocumentSnapshot.toAnime(): Anime? {
  * sbagliate fino alla scadenza. 1 = relazioni che includono speciali e schede senza formato.
  */
 private const val ANIME_CACHE_VERSION = 1L
+
+/**
+ * Puntate di una stagione in `episodes/{id}`. Per ogni puntata `n` e, solo se ci sono, `title`, `thumb`, `len`
+ * (minuti) e `score` (0-10): chiavi brevi perché una stagione lunga ne ha centinaia in un documento.
+ */
+fun SeasonEpisodes.toMap(): Map<String, Any> = buildMap {
+    put("id", animeId)
+    put("cachedAt", cachedAt)
+    put("v", EPISODES_CACHE_VERSION)
+    tmdbId?.let { put("tmdbId", it) }
+    overview?.let { put("overview", it.take(MAX_OVERVIEW)) }
+    put("episodes", episodes.take(MAX_EPISODES).map { episode ->
+        buildMap {
+            put("n", episode.number)
+            episode.title?.let { put("title", it) }
+            episode.thumbnailUrl?.let { put("thumb", it) }
+            episode.length?.let { put("len", it) }
+            episode.score?.let { put("score", it) }
+        }
+    })
+}
+
+fun DocumentSnapshot.toSeasonEpisodes(): SeasonEpisodes? {
+    if (!exists()) return null
+    val id = int("id") ?: return null
+    val episodes = (get("episodes") as? List<*>).orEmpty().mapNotNull { item ->
+        val map = item as? Map<*, *> ?: return@mapNotNull null
+        Episode(
+            number = (map["n"] as? Number)?.toInt() ?: return@mapNotNull null,
+            title = map["title"] as? String,
+            thumbnailUrl = map["thumb"] as? String,
+            length = (map["len"] as? Number)?.toInt(),
+            score = (map["score"] as? Number)?.toDouble(),
+        )
+    }
+    return SeasonEpisodes(
+        animeId = id,
+        tmdbId = int("tmdbId"),
+        overview = getString("overview"),
+        episodes = episodes,
+        // Scritte da una versione con un'altra fonte (Kitsu): scadute subito, si rileggono da TMDB.
+        cachedAt = if ((getLong("v") ?: 0L) >= EPISODES_CACHE_VERSION) getLong("cachedAt") ?: 0L else 0L,
+    )
+}
+
+/** Come [ANIME_CACHE_VERSION], per `episodes/`. 2 = TMDB, 3 = trama della stagione TMDB anche per le "Part 2". */
+private const val EPISODES_CACHE_VERSION = 3L
+
+/** Stessi limiti delle regole Firestore su `episodes/`. */
+private const val MAX_EPISODES = 2000
+private const val MAX_OVERVIEW = 4000
 
 fun DocumentSnapshot.toAnimeList(): AnimeList? {
     if (!exists()) return null

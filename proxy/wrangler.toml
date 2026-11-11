@@ -1,5 +1,6 @@
 # Proxy AI di AnimeWatch (Cloudflare Worker): vedi CLAUDE.md §6 e §8.
 # La chiave Gemini (Google AI Studio, piano gratuito) è un segreto, non sta qui: npx wrangler secret put GEMINI_API_KEY
+# Così quella di TMDB (API key v3), per le puntate nella scheda: npx wrangler secret put TMDB_API_KEY
 name = "animewatch-ai"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
@@ -22,6 +23,12 @@ MAX_TOKENS = "4000"
 name = "PER_USER"
 namespace_id = "1001"
 simple = { limit = 10, period = 60 }
+
+# TMDB: una scheda aperta per la prima volta ne fa due (ricerca e puntate), poi le legge dalla cache di Firestore.
+[[ratelimits]]
+name = "TMDB_PER_USER"
+namespace_id = "1002"
+simple = { limit = 30, period = 60 }
 
 [observability]
 enabled = true

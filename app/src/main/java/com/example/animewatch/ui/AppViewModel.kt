@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.animewatch.data.AppLog
 import com.example.animewatch.data.model.Anime
 import com.example.animewatch.data.model.AnimeList
+import com.example.animewatch.data.model.SeasonEpisodes
 import com.example.animewatch.data.model.Franchise
 import com.example.animewatch.data.model.ListInvite
 import com.example.animewatch.data.model.ListRole
@@ -110,6 +111,23 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
      */
     private val _unresolved = MutableStateFlow<Set<Int>>(emptySet())
     val unresolved: StateFlow<Set<Int>> = _unresolved.asStateFlow()
+
+    /** Puntate e trama in italiano, per stagione, da TMDB (vedi [ensureEpisodes]). */
+    private val _episodes = MutableStateFlow<Map<Int, SeasonEpisodes>>(emptyMap())
+    val episodes: StateFlow<Map<Int, SeasonEpisodes>> = _episodes.asStateFlow()
+
+    /** Stagioni di cui si stanno cercando le puntate. */
+    private val _episodesLoading = MutableStateFlow<Set<Int>>(emptySet())
+
+    /**
+     * Stagioni per cui la ricerca delle puntate è finita, riuscita o no: da lì in poi la scheda smette di aspettare la
+     * trama italiana e, se non è arrivata, mostra quella di AniList. Prima della ricerca, e durante, mostra lo skeleton.
+     */
+    private val _episodesSettled = MutableStateFlow<Set<Int>>(emptySet())
+    val episodesSettled: StateFlow<Set<Int>> = _episodesSettled.asStateFlow()
+
+    /** Senza proxy configurato le puntate e le trame italiane non arrivano mai: non c'è nulla da aspettare. */
+    val episodesAvailable: Boolean get() = container.episodeRepo.available
 
     /** Invito che si sta accettando (per mostrare l'attesa sul pulsante giusto). */
     private val _accepting = MutableStateFlow<String?>(null)
@@ -370,6 +388,27 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     // ---------- Puntate e stagioni ----------
+
+    /**
+     * Puntate (titolo, miniatura, durata, voto) e trama in italiano di tutte le stagioni di [franchise]: TMDB le dà
+     * tutte con una chiamata, e servono le date di ogni stagione per dividerle. Riaprendo la scheda basta la cache del
+     * repository. Le stagioni che non si riescono a leggere (offline e non in cache) restano col solo numero.
+     */
+    fun ensureEpisodes(franchise: Franchise) {
+        val ids = franchise.seasonIds
+        if (ids.any { it in _episodesLoading.value }) return
+        val seasons = ids.mapNotNull { _anime.value[it] }
+        if (seasons.size < ids.size) return
+        _episodesLoading.update { it + ids }
+        viewModelScope.launch {
+            try {
+                container.episodeRepo.load(seasons) { found -> _episodes.update { it + found } }
+            } finally {
+                _episodesLoading.update { it - ids.toSet() }
+                _episodesSettled.update { it + ids }
+            }
+        }
+    }
 
     fun toggleEpisode(anime: Anime, episode: Int) {
         val current = progress.value[anime.id]?.watchedEpisodes.orEmpty()

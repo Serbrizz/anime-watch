@@ -32,6 +32,27 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Cache condivisa delle puntate (da TMDB) e della trama in italiano, una per stagione, accanto ad anime/.
+    // Stesse garanzie: ID coerente, solo i campi previsti, mai cancellabile. Le singole puntate non si possono
+    // validare una per una (le regole non hanno cicli): si limita il numero.
+    match /episodes/{animeId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null
+        && animeId.matches('^[0-9]+$')
+        && request.resource.data.keys().hasOnly(['id', 'tmdbId', 'overview', 'episodes', 'cachedAt', 'v'])
+        && request.resource.data.keys().hasAll(['id', 'episodes', 'cachedAt', 'v'])
+        && request.resource.data.id is int
+        && string(request.resource.data.id) == animeId
+        && (!('tmdbId' in request.resource.data) || request.resource.data.tmdbId is int)
+        && (!('overview' in request.resource.data)
+            || (request.resource.data.overview is string && request.resource.data.overview.size() <= 4000))
+        && request.resource.data.episodes is list
+        && request.resource.data.episodes.size() <= 2000
+        && request.resource.data.cachedAt is int
+        && request.resource.data.v is int;
+      allow delete: if false;
+    }
+
     // Dati personali: progressi (e liste del vecchio formato, da migrare) visibili solo al proprietario.
     match /users/{uid}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == uid;

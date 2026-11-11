@@ -3,6 +3,9 @@ package com.example.animewatch.di
 import android.content.Context
 import com.example.animewatch.BuildConfig
 import com.example.animewatch.data.AnimeRepository
+import com.example.animewatch.data.EpisodeRepository
+import com.example.animewatch.data.remote.tmdb.TmdbApi
+import com.example.animewatch.data.remote.tmdb.TmdbClient
 import com.example.animewatch.data.firebase.AuthDataSource
 import com.example.animewatch.data.firebase.ListDataSource
 import com.example.animewatch.data.firebase.UserDataSource
@@ -45,34 +48,42 @@ class AppContainer(context: Context) {
     private val firebaseAuth = FirebaseAuth.getInstance()
 
     /**
-     * L'AI (Gemini) passando dal proxy (proxy/, Cloudflare Worker), che aggiunge la chiave: l'app si presenta con l'ID
-     * token Firebase dell'utente. null se il proxy non è configurato: il riordino AI resta semplicemente spento.
+     * Il proxy (proxy/, Cloudflare Worker) custodisce le chiavi di Gemini e TMDB: l'app si presenta con l'ID token
+     * Firebase dell'utente. null se il proxy non è configurato: il riordino AI resta spento e le puntate senza titoli.
      */
-    private val aiProxyApi: AiProxyApi? =
-        BuildConfig.AI_PROXY_URL.takeIf { it.isNotBlank() }?.let { proxyUrl ->
-            val client = OkHttpClient.Builder()
-                .addInterceptor { chain ->
-                    // Gli interceptor girano su un thread di OkHttp: si può attendere il token (rinnovato se scaduto).
-                    // Senza utente si parte senza token: il proxy risponde 401 e si usa l'algoritmo.
-                    val token = firebaseAuth.currentUser?.let { user ->
-                        runCatching { Tasks.await(user.getIdToken(false), 15, TimeUnit.SECONDS).token }.getOrNull()
-                    }
-                    val request = chain.request().newBuilder()
-                    if (token != null) request.header("Authorization", "Bearer $token")
-                    chain.proceed(request.build())
+    private val proxyHttp: OkHttpClient? = BuildConfig.AI_PROXY_URL.takeIf { it.isNotBlank() }?.let {
+        OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                // Gli interceptor girano su un thread di OkHttp: si può attendere il token (rinnovato se scaduto).
+                // Senza utente si parte senza token: il proxy risponde 401.
+                val token = firebaseAuth.currentUser?.let { user ->
+                    runCatching { Tasks.await(user.getIdToken(false), 15, TimeUnit.SECONDS).token }.getOrNull()
                 }
-                // Di solito risponde in pochi secondi, ma un modello lento o carico può metterci anche un minuto
-                // prima che arrivi il primo byte. Anche la lettura va allungata: quella predefinita (10 s) chiudeva prima.
-                .readTimeout(90, TimeUnit.SECONDS)
-                .callTimeout(90, TimeUnit.SECONDS)
-                .build()
-            Retrofit.Builder()
-                .baseUrl(proxyUrl)
-                .client(client)
-                .addConverterFactory(json.asConverterFactory(jsonMediaType))
-                .build()
-                .create(AiProxyApi::class.java)
-        }
+                val request = chain.request().newBuilder()
+                if (token != null) request.header("Authorization", "Bearer $token")
+                chain.proceed(request.build())
+            }
+            .build()
+    }
+
+    private fun <T> proxyApi(client: OkHttpClient, api: Class<T>): T = Retrofit.Builder()
+        .baseUrl(BuildConfig.AI_PROXY_URL)
+        .client(client)
+        .addConverterFactory(json.asConverterFactory(jsonMediaType))
+        .build()
+        .create(api)
+
+    // Gemini di solito risponde in pochi secondi, ma un modello lento o carico può metterci anche un minuto prima
+    // che arrivi il primo byte. Anche la lettura va allungata: quella predefinita (10 s) chiudeva prima.
+    private val aiProxyApi: AiProxyApi? = proxyHttp?.let { http ->
+        val slow = http.newBuilder().readTimeout(90, TimeUnit.SECONDS).callTimeout(90, TimeUnit.SECONDS).build()
+        proxyApi(slow, AiProxyApi::class.java)
+    }
+
+    // Una serie lunga sono due o tre chiamate a TMDB dentro il Worker.
+    private val tmdbApi: TmdbApi? = proxyHttp?.let { http ->
+        proxyApi(http.newBuilder().callTimeout(30, TimeUnit.SECONDS).build(), TmdbApi::class.java)
+    }
 
     // Download dell'APK: niente callTimeout (dipende dalla connessione), solo quello di lettura.
     private val updateHttp = OkHttpClient.Builder()
@@ -106,6 +117,7 @@ class AppContainer(context: Context) {
     val userData = UserDataSource(db)
     val listData = ListDataSource(db)
     val animeRepo = AnimeRepository(aniListClient, db)
+    val episodeRepo = EpisodeRepository(aniListClient, tmdbApi?.let(::TmdbClient), db)
     val recommender = RecommendationService(
         aniList = aniListClient,
         animeRepo = animeRepo,

@@ -1,9 +1,10 @@
-// Proxy fra AnimeWatch e Gemini (Google AI Studio, piano gratuito): la chiave è un segreto del Worker e non arriva mai
-// all'app. Accetta solo utenti autenticati dell'app (ID token di Firebase), con un limite di richieste per utente;
+// Proxy fra AnimeWatch e Gemini (Google AI Studio, piano gratuito), e verso TMDB per le puntate (src/tmdb.js): le chiavi
+// sono segreti del Worker e non arrivano mai all'app. Accetta solo utenti autenticati dell'app (ID token di Firebase), con un limite di richieste per utente;
 // modello e lunghezza massima della risposta li decide il Worker, non il client.
 // Verso l'app parla il formato chat/completions di OpenAI (quello che l'app conosce) e lo traduce per Gemini.
 
 import { AuthError, verifyFirebaseToken } from './firebase-auth.js'
+import { TmdbError, search as tmdbSearch, show as tmdbShow } from './tmdb.js'
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/'
 const MAX_BODY_BYTES = 64 * 1024
@@ -27,7 +28,8 @@ function clamp(value, min, max, fallback) {
     return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
 }
 
-const ROUTES = { '/chat/completions': 'POST', '/status': 'GET' }
+const ROUTES = { '/chat/completions': 'POST', '/status': 'GET', '/tmdb/search': 'GET' }
+const TMDB_SHOW = /^\/tmdb\/tv\/(\d{1,10})$/
 
 // Preflight dell'app: dice se la chiave è valida e il modello esiste, senza consumare la quota (è una lettura di
 // metadati). Gemini non espone la quota residua: se è finita lo scopre la prima richiesta, che risponde 429.
@@ -121,10 +123,14 @@ async function chat(env, body) {
 export default {
     async fetch(request, env) {
         const url = new URL(request.url)
-        const method = ROUTES[url.pathname]
+        const showId = url.pathname.match(TMDB_SHOW)?.[1]
+        const method = showId ? 'GET' : ROUTES[url.pathname]
         if (!method) return error(404, 'not found')
         if (request.method !== method) return error(405, 'method not allowed')
-        if (!env.GEMINI_API_KEY || models(env).length === 0) return error(500, 'proxy non configurato')
+        const isTmdb = url.pathname.startsWith('/tmdb/')
+        if (isTmdb ? !env.TMDB_API_KEY : !env.GEMINI_API_KEY || models(env).length === 0) {
+            return error(500, 'proxy non configurato')
+        }
 
         const authorization = request.headers.get('Authorization') ?? ''
         let user
@@ -138,12 +144,22 @@ export default {
             throw e
         }
 
-        // Il limite è per uid: un utente che insiste non consuma la quota gratuita di tutti.
-        if (env.PER_USER) {
-            const { success } = await env.PER_USER.limit({ key: user.uid })
+        // Il limite è per uid: un utente che insiste non consuma la quota gratuita di tutti. TMDB ha il suo, più
+        // largo: aprire qualche scheda di fila non deve togliere le richieste a Gemini.
+        const limiter = isTmdb ? env.TMDB_PER_USER : env.PER_USER
+        if (limiter) {
+            const { success } = await limiter.limit({ key: user.uid })
             if (!success) return error(429, 'too many requests')
         }
 
+        if (isTmdb) {
+            try {
+                return showId ? await tmdbShow(env, showId) : await tmdbSearch(env, url)
+            } catch (e) {
+                if (e instanceof TmdbError) return error(e.status, 'tmdb')
+                throw e
+            }
+        }
         if (url.pathname === '/status') return status(env)
 
         const text = await request.text()

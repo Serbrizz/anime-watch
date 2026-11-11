@@ -11,7 +11,10 @@ anime consigliati in base ai generi già guardati. Dati anime da AniList, dati u
 1. **Liste.** L'utente crea più liste con nome libero (es. "Da vedere in inverno"), vi aggiunge e toglie anime, le elimina.
    Il "+" su un anime apre un pannello dal basso con le liste da spuntare e "Nuova lista", che la crea con l'anime già dentro.
    Dentro una lista, "Aggiungi anime" apre la ricerca: ciò che si aggiunge finisce direttamente in quella lista.
-2. **Puntate.** Nella scheda di un anime ogni puntata è una chip che si segna/toglie come vista.
+2. **Puntate.** Nella scheda di un anime ogni puntata è una riga che si segna/toglie come vista: miniatura con la durata,
+   numero, titolo e voto degli utenti di TMDB. Ciò che TMDB non conosce manca: senza titolo resta "Puntata 12", senza
+   miniatura il numero al suo posto. Anche la trama della scheda viene da TMDB, sempre in italiano quando TMDB ne ha una:
+   quella della stagione, se TMDB la divide così, altrimenti quella della serie.
 3. **Stagioni.** In AniList ogni stagione è una scheda a sé (S1, S2… sono ID diversi), quindi *stagione* = *scheda anime*.
    Le schede collegate come prequel/sequel (film e OVA compresi) formano un **franchise**: nelle liste è un anime solo,
    nella scheda un menu a tendina (S1, S2, Film…) sceglie la stagione di cui segnare le puntate.
@@ -53,6 +56,7 @@ liste condivise (commenti, profili pubblici), tracciamento dei voti personali, t
 | Backend utente | Firebase Auth (solo Google) + Cloud Firestore + Crashlytics | BoM 33.4.0, plugin Crashlytics 3.0.2 |
 | Accesso Google | Credential Manager (`androidx.credentials`) + Google ID | 1.3.0 / 1.1.1 |
 | Dati anime | AniList GraphQL, `https://graphql.anilist.co/` | pubblico, senza chiave |
+| Dati delle puntate | TMDB (API v3), raggiunta tramite il proxy: titoli, trame in italiano, durate, miniature, voti | chiave v3 gratuita, uso non commerciale |
 | LLM (opzionale) | Gemini API (Google AI Studio, piano gratuito), raggiunta tramite il proxy | `gemini-flash-lite-latest` |
 | Proxy AI | Cloudflare Worker (`proxy/`, JavaScript), custodisce la chiave Gemini | Wrangler 4.160.0 |
 | Rete | Retrofit + OkHttp + kotlinx.serialization | 2.11.0 / 4.12.0 / 1.7.3 |
@@ -72,6 +76,19 @@ servizio di hosting, non un catalogo. I cataloghi pubblici esistenti sono AniLis
 rate limit stretto, non ufficiale) e Kitsu. AniList è stato scelto perché: nessuna chiave, generi e stato della serie
 affidabili, numero puntate e prossima puntata in corso, copertine, ricerca per titolo.
 Firestore fa da **cache condivisa** davanti ad AniList (§5), così si fa una sola chiamata esterna per anime per tutti gli utenti.
+
+### Perché TMDB per le puntate (e AniList per il resto)
+AniList ha solo `streamingEpisodes` (titolo e miniatura presi da Crunchyroll), inaffidabili: molte stagioni hanno le puntate
+di un'altra (Fire Force S1 e S2 quelle della S3, Attack on Titan S2 e S3 quelle della S1), alcune le numerano di seguito alla
+stagione prima, e mancano per molte serie recenti. Provati anche Kitsu (titoli e miniature giusti, ma la durata è quella
+nominale copiata su tutte le puntate) e Jikan (voti, ma non ufficiale, spesso giù, e la durata solo con una richiesta per
+puntata). TMDB dà con **una chiamata per serie** titolo e trama in italiano, durata vera (Frieren 23-26 min, i capitoli
+finali di Attack on Titan 61 e 85), miniatura, data e voto di ogni puntata.
+TMDB però resta solo per la scheda: come catalogo sarebbe peggio di AniList. I suoi generi sono quelli della TV occidentale
+(tutti gli anime sono "Animazione", Frieren e Attack on Titan hanno quasi gli stessi) e i Consigliati si basano sui generi;
+divide le stagioni a modo suo (Frieren S1 e S2 sono una "stagione 1" da 38 puntate); i film sono schede separate dalla
+serie; la ricerca non conosce i titoli romaji; e ogni chiamata passerebbe dal proxy. Liste e progressi usano poi gli ID
+AniList.
 
 ### Perché un proxy su Cloudflare
 Una chiave dentro l'APK si estrae sempre: decompilando l'app o leggendo la richiesta. Le release sono pubbliche, quindi
@@ -96,14 +113,17 @@ app/src/main/java/com/example/animewatch/
 │  ├─ AppErrors.kt             tipo di un errore (rete, servizio, download corrotto, spazio, inatteso) (puro, testato)
 │  ├─ AppLog.kt                log: logcat, righe allegate ai report di Crashlytics, non fatali per gli errori inattesi (§8)
 │  ├─ model/Models.kt          Anime, WatchProgress, AnimeList, ListRole, ListInvite, UserProfile (+ regole di dominio)
+│  ├─ model/Episodes.kt        puntate: abbinamento per data fra stagioni AniList e puntate TMDB, scelta della serie, scadenza (puro, testato)
 │  ├─ model/Franchise.kt       stagioni di una serie: raggruppamento (anche di risultati e consigli), ordine, etichette, stagione corrente (puro, testato)
 │  ├─ AnimeRepository.kt       memoria -> Firestore `anime/` -> AniList; catena prequel/sequel a ondate
+│  ├─ EpisodeRepository.kt     memoria -> Firestore `episodes/` -> date da AniList, serie e puntate da TMDB (tramite il proxy)
 │  ├─ firebase/AuthDataSource  accesso con Google (Credential Manager -> Firebase), uscita, profilo utente
 │  ├─ firebase/ListDataSource  liste (anche condivise), membri, inviti, migrazione dal vecchio formato
 │  ├─ firebase/UserDataSource  progressi (flussi in tempo reale)
 │  ├─ firebase/Mappers.kt      modelli <-> documenti Firestore
 │  ├─ remote/
 │  │  ├─ anilist/              AniListApi (1 endpoint POST), AniListClient (query), DTO
+│  │  ├─ tmdb/                 TmdbApi (ricerca e serie con le puntate, tramite il proxy), TmdbClient
 │  │  └─ ai/                   AiProxyApi (chat/completions e preflight, tramite il proxy)
 │  └─ update/                  AppUpdater (release GitHub, download, installer), GitHubApi, AppVersion e PendingReleases (puri, testati)
 ├─ domain/
@@ -124,10 +144,11 @@ app/src/main/java/com/example/animewatch/
 
 proxy/                          Cloudflare Worker "animewatch-ai" (fuori dall'app, deploy con wrangler)
 ├─ src/index.js                 POST /chat/completions: token Firebase, limite per utente, modello fisso, traduzione per Gemini;
-│                               GET /status: preflight su chiave e modello
+│                               GET /status: preflight su chiave e modello; instradamento verso src/tmdb.js
+├─ src/tmdb.js                  GET /tmdb/search e GET /tmdb/tv/{id}: aggiunge la chiave TMDB, risposte ridotte ai campi usati
 ├─ src/firebase-auth.js         verifica degli ID token Firebase (firma RS256 con le chiavi di Google, aud/iss/exp/sub)
-├─ test/                        node --test sulla verifica del token
-└─ wrangler.toml                nome, variabili (progetto Firebase, modello, max token), limite di richieste
+├─ test/                        node --test sulla verifica del token e sulle risposte TMDB ridotte
+└─ wrangler.toml                nome, variabili (progetto Firebase, modello, max token), limiti di richieste (Gemini e TMDB)
 ```
 
 Dipendenze ammesse: `ui -> domain/data`, `domain -> data`, `data` non conosce `ui`. `RecommendationEngine` non deve
@@ -148,7 +169,7 @@ importare nulla di Android (resta testabile sulla JVM).
 | `list/{listId}/members` | Membri con ruolo. Proprietario: invito per email + ruolo, inviti in attesa da ritirare, cambia ruolo / rimuovi membro. Altri: "Esci dalla lista" |
 | `list/{listId}/search` | La ricerca di `search` legata alla lista (titolo "Aggiungi a …", tastiera aperta all'arrivo): il "+" aggiunge la serie alla lista e diventa una spunta che la toglie. Se la lista sparisce o non è più modificabile torna la ricerca normale |
 | `profile/invites` | Inviti ricevuti: lista, chi invita, ruolo; "Accetta" / "Rifiuta" |
-| `anime/{animeId}` | Copertina, generi, trama, "Aggiungi a una lista" (aggiunge la serie), sotto il menu a tendina "Stagione" (se più d'una: etichetta, titolo, spunta sulle viste; c'è da subito se la scheda ha prequel/sequel e, finché le stagioni caricano, mostra il titolo di quella aperta e un indicatore di attesa), griglia di chip per puntata, "Segna tutte"/"Azzera" |
+| `anime/{animeId}` | Skeleton finché la scheda non arriva. Copertina, generi, trama (skeleton finché non finisce la ricerca su TMDB: poi quella italiana o, se non c'è, quella di AniList, senza passare dall'una all'altra), sotto la trama una piccola leggenda dei voti (voto medio da AniList, 0-100; stelle delle puntate da TMDB, 0-10; solo quelli presenti), "Aggiungi a una lista" (aggiunge la serie), sotto il menu a tendina "Stagione" (se più d'una: etichetta, titolo, spunta sulle viste; c'è da subito se la scheda ha prequel/sequel e, finché le stagioni caricano, mostra il titolo di quella aperta e un indicatore di attesa), una riga per puntata (miniatura 16:9 col numero sotto e la durata sopra; a destra "12. Titolo" su due righe al massimo, col numero in grigio e la stessa dimensione, e sotto il voto di TMDB, tutto centrato in verticale, oppure solo "Puntata 12"; casella centrata a destra; tutta la riga segna/toglie; altezza fissa mentre i dati arrivano (le puntate si chiedono quando il franchise è noto); skeleton su miniatura e titolo finché mancano i dati della puntata, sulla miniatura finché manca l'immagine, e ogni immagine compare appena è pronta), "Segna tutte"/"Azzera" |
 | `search` | Campo di ricerca, skeleton dei risultati durante la ricerca, una riga per serie dalla più popolare (la sua stagione più popolare fra i risultati) con "+" per aggiungere a una lista; sopra, l'avviso se si è cercato senza l'ultima parola |
 | — (pannello "Aggiungi a una lista") | Dal "+" di Cerca e Consigliati e dal pulsante della scheda: copertina e titolo, una scheda per lista modificabile da accendere/spegnere (vale per la serie), "Nuova lista con questo anime", "Fatto" |
 | `recs` | Solo se il proxy è configurato, un'intestazione di altezza fissa (nulla si sposta quando il pulsante cambia forma) col pulsante "Affina con Gemini" e il suo logo a destra, disattivato con "Gemini non è disponibile al momento" se il preflight dice no. Acceso si riduce a un cerchio col logo, con un anello mentre l'AI lavora e, a riordino fatto, logo verde e spunta animata; ritoccato torna l'elenco dell'algoritmo. Se l'algoritmo fallisce o non trova candidati torna aperto (ritoccarlo riprova). Skeleton al primo calcolo; poi elenco con affinità % e motivo, con la stella di Gemini davanti all'affinità se l'ha data l'AI; mentre si ricalcola resta quello di prima, sbiadito. I generi dominanti non si mostrano |
@@ -167,6 +188,10 @@ anime/{anilistId}                    CACHE CONDIVISA fra tutti gli utenti
   status?, season?, seasonYear?, averageScore?, description?, format?,
   prequelIds[], sequelIds[]          (anime collegati, esclusi i video musicali), cachedAt (ms),
   v                                  versione del formato (ANIME_CACHE_VERSION in Mappers.kt)
+
+episodes/{anilistId}                 CACHE CONDIVISA: puntate e trama italiana di una stagione, da TMDB (anche vuoto)
+  id, tmdbId? (la serie TMDB del franchise), overview?, episodes[{n, title?, thumb? (URL), len? (min), score? (0-10)}]
+  (max 2000), cachedAt (ms), v (EPISODES_CACHE_VERSION: 3 = trama della stagione TMDB anche per le "Part 2")
 
 lists/{listId}                       una lista, personale o condivisa
   name, ownerId, createdAt (ms), updatedAt (ms), animeIds[]   (ID della prima stagione di ogni serie; arrayUnion/arrayRemove)
@@ -206,7 +231,20 @@ in `lists/` con lo stesso ID e cancella le vecchie; quando non ce ne sono più, 
 - TTL della cache: serie concluse 30 giorni (7 se senza seguito, per scoprire una nuova stagione annunciata), serie in corso
   12 ore (escono nuove puntate). Le schede con `v` mancante o minore di `ANIME_CACHE_VERSION` valgono come scadute:
   si incrementa quando cambia ciò che si ricava da AniList, altrimenti le schede vecchie restano fino alla scadenza.
-  Se AniList non risponde si usa il dato scaduto.
+  Se AniList non risponde si usa il dato scaduto. `episodes/`: 30 giorni per le serie concluse, 12 ore per le altre.
+- **Puntate.** In `episodes/` e non dentro `anime/`: la ricostruzione dei franchise legge molte schede e non deve
+  scaricare centinaia di titoli. Si chiedono dalla scheda per tutte le stagioni del franchise insieme, quando è noto: prima
+  la cache (anche scaduta), poi, se una stagione manca o è scaduta, le date da AniList (`seasonDates`) e la serie TMDB.
+  La serie si cerca dalla prima stagione TV (titolo romaji e anno, poi inglese, poi senza anno; al massimo 2 candidati
+  per ricerca, animazioni uscite entro un anno) e si accetta solo se ha puntate nelle sue date; il suo `tmdbId` si salva
+  e le volte dopo non si cerca più. Le puntate di ogni stagione AniList sono quelle TMDB uscite fra il suo inizio e la
+  sua fine (±1 giorno), in ordine di data e rinumerate da 1: nelle stagioni normali per TV e ONA, nella stagione 0
+  (speciali) per OVA, speciali e film. Così Frieren S2 sono le puntate 29-38 della "stagione 1" di TMDB e Fire Force S3
+  Part 2 la S3 dalla 13. Trama italiana: quella della stagione TMDB che contiene le puntate della stagione AniList (anche
+  per le "Part 2"), altrimenti quella della serie; quella inglese di AniList solo se TMDB non ne ha. TMDB non ha sempre
+  una trama per stagione: Frieren ha solo la "stagione 1", senza trama, e nemmeno i suoi episode group ne hanno, quindi
+  la S2 mostra quella della serie. Se qualcosa fallisce non si salva nulla e
+  si riprova alla prossima apertura; se la serie non si trova si salva vuoto.
 - **Franchise.** Non si salvano: si ricostruiscono nel client seguendo `prequelIds`/`sequelIds` (`getWithRelated`, una
   `getMany` per livello della catena, al massimo 30 livelli e 300 schede). Ogni livello legge prima la copia di `anime/`
   sul dispositivo (`Source.CACHE`) e va al server solo per le schede mancanti o scadute: con la rete un `get()` normale
@@ -215,7 +253,7 @@ in `lists/` con lo stesso ID e cancella le vecchie; quando non ce ne sono più, 
   aggiungere un'altra stagione della stessa serie non cambia nulla, togliere la serie toglie tutte le sue stagioni.
   Le liste di prima possono avere più stagioni della stessa serie: si mostrano come una riga sola, senza migrazione.
   Il progresso resta per stagione (`users/{uid}/progress/{anilistId}`).
-- `firestore.rules`: `anime/` leggibile/scrivibile da utenti autenticati con validazione di campi, tipi e ID, **mai cancellabile**;
+- `firestore.rules`: `anime/` ed `episodes/` leggibili/scrivibili da utenti autenticati con validazione di campi, tipi e ID, **mai cancellabile**;
   `users/{uid}/**` solo dal proprietario; `lists/` leggibile dai membri e modificabile secondo il ruolo (tabella sopra);
   `invites/` leggibile e cancellabile solo da mittente e destinatario, creabile solo dal proprietario della lista.
 - Le query sono costruite perché le regole le possano verificare: `lists` con `memberIds array-contains uid`, `invites` con
@@ -228,15 +266,26 @@ in `lists/` con lo stesso ID e cancella le vecchie; quando non ce ne sono più, 
 
 ## 6. API esterne
 
-**AniList** — un solo endpoint, `POST /` con `{query, variables}`. Tre query in `AniListClient`:
+**AniList** — un solo endpoint, `POST /` con `{query, variables}`. Quattro query in `AniListClient`:
 `search` (`media(search:…, sort: SEARCH_MATCH)`, i 25 più pertinenti riordinati nel client per `popularity`: con
-`POPULARITY_DESC` lato AniList i titoli trovati per sinonimo scavalcano quelli giusti), `byIds` (`id_in`, max 50), `popularByGenre` (`genre:…`, `POPULARITY_DESC`, formati TV/MOVIE/OVA/ONA).
+`POPULARITY_DESC` lato AniList i titoli trovati per sinonimo scavalcano quelli giusti), `byIds` (`id_in`, max 50), `popularByGenre` (`genre:…`, `POPULARITY_DESC`, formati TV/MOVIE/OVA/ONA),
+`seasonDates` (`id_in`, max 50, solo formato e `startDate`/`endDate`: servono a trovare le puntate su TMDB, chieste solo quando non sono in cache).
 Sempre `isAdult: false` dove si cerca. Limite ~90 richieste/minuto: le chiamate sono ridotte da cache e debounce.
 Ogni query chiede anche `format` e `relations` (`relationType(version: 2)`): si tengono solo `PREQUEL`/`SEQUEL` verso
 anime di qualsiasi formato tranne i video musicali. Gli speciali restano perché a volte sono l'unico anello fra due
 stagioni (Dr. Stone: Stone Wars -> speciale "Ryusui" -> New World), e restano le schede annunciate, che su AniList non
 hanno ancora un formato. AniList non
 mette sempre la relazione inversa, quindi il raggruppamento la tratta come non orientata.
+
+**TMDB, tramite il proxy** — l'app chiama `GET <aiProxyUrl>tmdb/search?query=…&year=…` e `GET <aiProxyUrl>tmdb/tv/{id}`, con
+lo stesso token Firebase di Gemini e un limite a parte di 30 richieste al minuto per uid. Il Worker aggiunge la chiave
+(segreto `TMDB_API_KEY`, API key v3) e `language=it-IT`, e riduce le risposte ai campi usati (con cast e troupe una serie
+supera i 400 KB): la ricerca a `{id, name, originalName, firstAirDate, genreIds, originCountry}` (al massimo 10), la serie a
+`{id, name, overview, firstAirDate, seasons[{number, overview, episodes[{season, number, airDate, name, runtime, still,
+vote}]}]}`. Per avere tutte le stagioni con una chiamata usa `append_to_response=season/0,…,season/19` (TMDB ne accetta 20
+e ignora quelle che non esistono); oltre la 19 (One Piece) ne fa altre. Le miniature: `https://image.tmdb.org/t/p/w300` +
+`still`. `vote` è null se nessuno ha votato. Gli errori di TMDB tornano come 404 (serie inesistente) o 502.
+Termini d'uso: uso non commerciale gratuito, con logo e citazione nell'app.
 
 **Gemini, tramite il proxy** — l'app parla il formato chat/completions di OpenAI: `POST <aiProxyUrl>chat/completions`
 con header `Authorization: Bearer <ID token Firebase dell'utente>` e corpo `{messages, temperature, response_format}`,
@@ -340,7 +389,7 @@ cambiare mai**. Dà accesso anche a tutto ciò che è firmato con lo stesso keys
 
 ### Proxy AI (Cloudflare Worker)
 L'app non ha bisogno di nessuna chiave. Conosce solo l'indirizzo del Worker, `aiProxyUrl` in `gradle.properties`: se è
-vuoto il pulsante Gemini non compare. Il Worker `animewatch-ai` è sull'account Cloudflare di chi lo gestisce; per
+vuoto il pulsante Gemini non compare e le puntate restano col solo numero. Il Worker `animewatch-ai` è sull'account Cloudflare di chi lo gestisce; per
 modificarlo serve l'accesso a quell'account, che Cloudflare permette di condividere invitando membri. Da `proxy/`:
 ```
 npm install                                  # una volta: wrangler alla versione fissata
@@ -348,6 +397,7 @@ npm test                                     # test della verifica del token
 npx wrangler login                           # una volta per PC (apre il browser)
 npm run deploy                               # pubblica; stampa l'URL da mettere in aiProxyUrl
 npx wrangler secret put GEMINI_API_KEY       # la chiave, solo la prima volta o quando cambia
+npx wrangler secret put TMDB_API_KEY         # la API key v3 di TMDB (themoviedb.org -> Impostazioni -> API)
 npm run logs                                 # log in tempo reale (401, 429, errori e risposte di Gemini)
 ```
 La chiave si crea su aistudio.google.com/apikey, su un progetto Google Cloud **senza fatturazione** (piano gratuito: non
@@ -357,7 +407,7 @@ Cambiarli non richiede una nuova versione dell'app, basta un deploy. I modelli d
 
 ### Build e test
 ```
-./gradlew :app:testDebugUnitTest          # unit test (raccomandazioni, liste condivise, franchise, versioni, errori)
+./gradlew :app:testDebugUnitTest          # unit test (raccomandazioni, liste condivise, franchise, puntate, versioni, errori)
 ./gradlew :app:assembleDebug              # APK in app/build/outputs/apk/debug/
 .\install.ps1 [-Release] [-Serial <id>]   # git fetch + pull --ff-only, build, adb install -r sul telefono collegato
 ```
@@ -372,7 +422,7 @@ Android Studio (Koala o successivo) apre la cartella e fa tutto da solo. La CI (
 
 ## 9. Sicurezza e limiti noti
 
-- **Proxy AI.** La chiave Gemini non è nell'APK. L'URL del Worker è pubblico, ma risponde solo a chi ha un ID token
+- **Proxy AI.** Le chiavi di Gemini e TMDB non sono nell'APK. L'URL del Worker è pubblico, ma risponde solo a chi ha un ID token
   del progetto Firebase. Chiunque abbia un account Google può però accedere all'app e quindi usare il proxy, entro
   10 richieste al minuto. La chiave è sul piano gratuito, senza fatturazione: non si paga nulla. La quota giornaliera
   è condivisa da tutti gli utenti dell'app; finita, il pulsante Gemini risulta "non disponibile al momento" fino al
@@ -397,6 +447,11 @@ Android Studio (Koala o successivo) apre la cartella e fa tutto da solo. La CI (
 - **Confini del franchise.** Dipendono dalle relazioni di AniList: uno spin-off (`SPIN_OFF`, `SIDE_STORY`) resta una serie a
   sé. Uno speciale-riassunto collegato come sequel compare fra le stagioni ("Speciale"). L'ordine delle stagioni è per
   anno e stagione d'uscita.
+- **Dati delle puntate.** Dipendono da TMDB e dall'abbinamento per data: mancano se la ricerca non trova la serie (titoli
+  molto diversi fra AniList e TMDB) o se le date di AniList e TMDB differiscono di più di un giorno; una stagione con
+  puntate uscite in giorni sparsi fuori dalle sue date le perde. Due serie con lo stesso titolo uscite a meno di un anno
+  di distanza potrebbero confondersi: la verifica sulle date lo rende improbabile. Senza proxy configurato resta il numero.
+  Verificato l'11/11/2026 su Frieren, Fire Force e Attack on Titan (16 stagioni, OVA e speciali compresi).
 - **Inviti per email esatta.** L'invito vale per l'email scritta, confrontata in minuscolo con quella dell'account Google.
   Alias come `nome.cognome@gmail.com` / `nomecognome@gmail.com` o `+etichetta` non vengono riconosciuti: serve l'email
   con cui la persona accede. Non c'è notifica: il destinatario vede l'invito aprendo l'app.
@@ -426,6 +481,9 @@ Verificato (11/11/2026):
 - Messaggi d'errore su dispositivo: Consigliati e Cerca senza rete, AniList in errore (simulato); tornata la rete, Cerca e
   "Aggiorna" ripartono. Un `AppLog.error` di prova arriva in Crashlytics come non fatale con UID e righe di log; gli errori
   di rete restano fuori.
+- Puntate da TMDB su dispositivo, col proxy e le regole pubblicati: Frieren S2 (le puntate 29-38 di TMDB rinumerate da 1,
+  titoli italiani, 23 min, voti), Fire Force S1 e S2 (trama italiana della stagione), Chainsaw Man aperto per la prima
+  volta (skeleton, poi direttamente la trama italiana); skeleton di Cerca.
 
 Da verificare:
 1. Su dispositivo, con due account Google: invito, accettazione, rifiuto, sola visualizzazione, uscita, modalità aereo.
@@ -434,6 +492,9 @@ Da verificare:
 3. Franchise su dispositivo, dopo aver pubblicato le regole con i campi nuovi di `anime/` (senza, la scrittura in cache
    fallisce e ogni apertura rilegge da AniList): selettore di stagione, lista con S1 e S2 già presenti, aggiunta della S2
    di una serie già in lista, rimozione, offline.
+4. Puntate da TMDB su dispositivo: gli speciali di Attack on Titan (61 e 85 min), una serie con più di 19 stagioni TMDB
+   (One Piece, seconda chiamata del proxy), una serie che TMDB non ha (niente skeleton infinito), offline con e senza
+   cache; skeleton di Liste e Consigliati. Per questi casi l'abbinamento è provato con uno script, non dall'app.
 
 Le regole di `lists/` e `invites/` sono provate nell'emulatore Firestore con `@firebase/rules-unit-testing`
 (66 casi: creazione, lettura, inviti, ingresso con ruolo giusto e sbagliato, editor, viewer, rifiuto, ritiro,

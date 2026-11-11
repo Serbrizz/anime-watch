@@ -2,6 +2,7 @@ package com.example.animewatch.data.remote.anilist
 
 import com.example.animewatch.data.ServiceException
 import com.example.animewatch.data.model.Anime
+import com.example.animewatch.data.model.SeasonDates
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
@@ -33,6 +34,15 @@ class AniListClient(private val api: AniListApi) {
             put("perPage", perPage)
         })
 
+    /**
+     * Formato e date di uscita delle stagioni [ids], con cui si trovano le loro puntate su TMDB. Query a parte, fatta
+     * solo quando le puntate non sono in cache: non vale la pena salvare le date in ogni scheda di `anime/`.
+     * Al massimo 50 ID per chiamata.
+     */
+    suspend fun seasonDates(ids: List<Int>): List<SeasonDates> =
+        fetch(SEASON_DATES, buildJsonObject { putJsonArray("ids") { ids.forEach { add(it) } } })
+            .map { SeasonDates(it.id, it.format, it.startDate?.iso(), it.endDate?.iso()) }
+
     private suspend fun run(query: String, variables: JsonObject): List<Anime> =
         fetch(query, variables).map { it.toAnime() }
 
@@ -62,6 +72,10 @@ class AniListClient(private val api: AniListApi) {
             "query (\$genre: String, \$perPage: Int) { Page(page: 1, perPage: \$perPage) { " +
                 "media(genre: \$genre, type: ANIME, isAdult: false, format_in: [TV, MOVIE, OVA, ONA], " +
                 "sort: POPULARITY_DESC) { $MEDIA_FIELDS } } }"
+
+        val SEASON_DATES =
+            "query (\$ids: [Int]) { Page(page: 1, perPage: 50) { media(id_in: \$ids, type: ANIME) { " +
+                "id format startDate { year month day } endDate { year month day } } } }"
     }
 }
 

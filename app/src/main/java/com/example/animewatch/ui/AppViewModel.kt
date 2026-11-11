@@ -2,7 +2,14 @@ package com.example.animewatch.ui
 
 import android.content.Context
 import android.util.Log
+import androidx.credentials.exceptions.GetCredentialInterruptedException
+import androidx.credentials.exceptions.GetCredentialProviderConfigurationException
+import androidx.credentials.exceptions.GetCredentialUnsupportedException
+import androidx.credentials.exceptions.NoCredentialException
 import androidx.lifecycle.ViewModel
+import com.google.firebase.FirebaseNetworkException
+import com.google.firebase.FirebaseTooManyRequestsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import androidx.lifecycle.viewModelScope
 import com.example.animewatch.data.model.Anime
 import com.example.animewatch.data.model.AnimeList
@@ -128,11 +135,36 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _loginError.value = "Accesso non riuscito: ${e.message}"
+                _loginError.value = signInErrorMessage(e)
             } finally {
                 _signingIn.value = false
             }
         }
+    }
+
+    /**
+     * I messaggi di Credential Manager e Firebase sono tecnici e in inglese: per i casi comuni si dice
+     * all'utente cosa fare. Il testo originale resta in fondo e in Crashlytics, per la diagnosi.
+     */
+    private fun signInErrorMessage(e: Exception): String {
+        val detail = e.message.orEmpty()
+        val hint = when {
+            e is NoCredentialException ->
+                "Nessun account Google disponibile: aggiungine uno nelle impostazioni del telefono e riprova."
+            e is GetCredentialProviderConfigurationException || e is GetCredentialUnsupportedException ->
+                "Questo telefono non supporta l'accesso con Google: servono i Google Play Services aggiornati."
+            e is GetCredentialInterruptedException -> "Accesso interrotto, riprova."
+            // DEVELOPER_ERROR: l'APK è firmato con una chiave il cui SHA-1 non è registrato in Firebase.
+            "28444" in detail || "Developer console" in detail ->
+                "Questa copia dell'app non è autorizzata per l'accesso con Google (SHA-1 della firma non " +
+                    "registrato in Firebase). Installa l'APK ufficiale."
+            e is FirebaseNetworkException || "network" in detail.lowercase() ->
+                "Serve la connessione a internet per il primo accesso."
+            e is FirebaseTooManyRequestsException -> "Troppi tentativi, riprova fra qualche minuto."
+            e is FirebaseAuthInvalidUserException -> "Questo account è stato disabilitato."
+            else -> null
+        }
+        return if (hint != null) "$hint\n($detail)" else "Accesso non riuscito: $detail"
     }
 
     fun signOut() {

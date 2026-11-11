@@ -362,6 +362,10 @@ Cambiarli non richiede una nuova versione dell'app, basta un deploy. I modelli d
 ```
 `install.ps1` controlla git, adb e telefono prima di iniziare e si ferma al primo errore indicando passo e motivo
 (anche con Ctrl+C); il pull è solo fast-forward, quindi con branch divergenti non fa merge.
+`.\pair-wifi.ps1` collega il telefono via Wi-Fi: se è attaccato al cavo accende da solo il debug wireless, poi trova
+indirizzo e porta via mDNS (la porta cambia a ogni accensione) e fa `adb connect`. Se il PC non è abbinato (la prima
+volta per ogni coppia PC-telefono) fa anche `adb pair`: si apre "Abbina dispositivo con codice" sul telefono e si
+scrive solo il codice, indirizzo e porta li trova da solo.
 Android Studio (Koala o successivo) apre la cartella e fa tutto da solo. La CI (`.github/workflows/build.yml`) usa il
 `google-services.json.example` come segnaposto, quindi compila senza segreti.
 

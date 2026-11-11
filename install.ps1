@@ -102,7 +102,7 @@ try {
         $device = $devices | Where-Object { $_.Serial -eq $Serial } | Select-Object -First 1
         if (-not $device) { Fail "il dispositivo '$Serial' non è collegato (collegati: $(($devices | ForEach-Object { $_.Serial }) -join ', '))." }
     } elseif ($devices.Count -eq 0) {
-        Fail 'nessun telefono collegato: collegalo via USB con il debug USB attivo (o usa adb connect per il debug wireless).'
+        Fail 'nessun telefono collegato: collegalo via USB con il debug USB attivo (o collegalo via Wi-Fi con .\pair-wifi.ps1).'
     } elseif ($devices.Count -gt 1) {
         Fail "sono collegati più dispositivi ($(($devices | ForEach-Object { $_.Serial }) -join ', ')): scegli quale con -Serial <seriale>."
     } else {

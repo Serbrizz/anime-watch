@@ -9,6 +9,8 @@ import com.example.animewatch.data.firebase.UserDataSource
 import com.example.animewatch.data.remote.anilist.AniListApi
 import com.example.animewatch.data.remote.anilist.AniListClient
 import com.example.animewatch.data.remote.openrouter.OpenRouterApi
+import com.example.animewatch.data.update.AppUpdater
+import com.example.animewatch.data.update.GitHubApi
 import com.example.animewatch.domain.LlmReranker
 import com.example.animewatch.domain.RecommendationService
 import com.google.firebase.auth.FirebaseAuth
@@ -60,6 +62,31 @@ class AppContainer(context: Context) {
                 .build()
                 .create(OpenRouterApi::class.java)
         }
+
+    // Download dell'APK: niente callTimeout (dipende dalla connessione), solo quello di lettura.
+    private val updateHttp = OkHttpClient.Builder()
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            // L'API di GitHub rifiuta le richieste senza User-Agent.
+            chain.proceed(chain.request().newBuilder().header("User-Agent", "AnimeWatch/${BuildConfig.VERSION_NAME}").build())
+        }
+        .build()
+
+    private val gitHubApi: GitHubApi = Retrofit.Builder()
+        .baseUrl("https://api.github.com/")
+        .client(updateHttp.newBuilder().callTimeout(20, TimeUnit.SECONDS).build())
+        .addConverterFactory(json.asConverterFactory(jsonMediaType))
+        .build()
+        .create(GitHubApi::class.java)
+
+    val updater = AppUpdater(
+        context = context.applicationContext,
+        api = gitHubApi,
+        http = updateHttp,
+        repo = BuildConfig.UPDATE_REPO,
+        currentVersion = BuildConfig.VERSION_NAME,
+    )
 
     private val aniListClient = AniListClient(aniListApi)
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance()

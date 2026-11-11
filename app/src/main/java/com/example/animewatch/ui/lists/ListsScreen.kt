@@ -3,6 +3,7 @@
 package com.example.animewatch.ui.lists
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -19,11 +20,16 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -52,14 +58,22 @@ import com.example.animewatch.data.model.ListRole
 import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.EmptyState
 import com.example.animewatch.ui.components.roleLabel
+import com.example.animewatch.ui.update.UpdateViewModel
 
 @Composable
-fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit, onOpenInvites: () -> Unit) {
+fun ListsScreen(
+    vm: AppViewModel,
+    updateVm: UpdateViewModel,
+    onOpenList: (String) -> Unit,
+    onOpenInvites: () -> Unit,
+) {
     val lists by vm.lists.collectAsStateWithLifecycle()
     val progress by vm.progress.collectAsStateWithLifecycle()
     val animeMap by vm.anime.collectAsStateWithLifecycle()
     val invites by vm.incomingInvites.collectAsStateWithLifecycle()
     val me by vm.user.collectAsStateWithLifecycle()
+    val update by updateVm.state.collectAsStateWithLifecycle()
+    var menuOpen by remember { mutableStateOf(false) }
     var showCreate by rememberSaveable { mutableStateOf(false) }
     var toDelete by remember { mutableStateOf<AnimeList?>(null) }
 
@@ -76,8 +90,39 @@ fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit, onOpenInvites: (
                             Icon(Icons.Default.Email, contentDescription = "Inviti")
                         }
                     }
-                    IconButton(onClick = vm::signOut) {
-                        Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Esci")
+                    Box {
+                        IconButton(onClick = { menuOpen = true }) {
+                            BadgedBox(badge = { if (update.available != null) Badge() }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "Altre opzioni")
+                            }
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            val available = update.available
+                            if (available != null) {
+                                DropdownMenuItem(
+                                    text = { Text("Aggiorna alla versione ${available.version}") },
+                                    leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                                    onClick = { menuOpen = false; updateVm.openDialog() },
+                                )
+                            } else {
+                                DropdownMenuItem(
+                                    text = { Text("Verifica aggiornamenti") },
+                                    leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                                    onClick = { menuOpen = false; updateVm.checkNow() },
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("Esci dall'account") },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null) },
+                                onClick = { menuOpen = false; vm.signOut() },
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("AnimeWatch ${updateVm.currentVersion}") },
+                                onClick = {},
+                                enabled = false,
+                            )
+                        }
                     }
                 },
             )

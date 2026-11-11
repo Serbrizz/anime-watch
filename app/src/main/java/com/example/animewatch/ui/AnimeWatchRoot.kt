@@ -17,12 +17,17 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -46,6 +51,8 @@ import com.example.animewatch.ui.recs.RecommendationsScreen
 import com.example.animewatch.ui.recs.RecommendationsViewModel
 import com.example.animewatch.ui.search.SearchScreen
 import com.example.animewatch.ui.search.SearchViewModel
+import com.example.animewatch.ui.update.UpdateDialog
+import com.example.animewatch.ui.update.UpdateViewModel
 
 private object Routes {
     const val LISTS = "lists"
@@ -75,18 +82,33 @@ fun AnimeWatchRoot(container: AppContainer) {
         initializer { AppViewModel(container) }
     })
     val authState by appVm.authState.collectAsStateWithLifecycle()
+    val updateVm: UpdateViewModel = viewModel(factory = viewModelFactory {
+        initializer { UpdateViewModel(container.updater) }
+    })
+    val update by updateVm.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    // Anche al ritorno dalle impostazioni "installa app sconosciute", dove può essere in attesa un aggiornamento.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { updateVm.onResume() }
+    LaunchedEffect(updateVm) {
+        updateVm.messages.collect { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+    }
 
     when (authState) {
         // Sfondo vuoto per un istante, così all'avvio non lampeggia il login se la sessione c'è già.
         AuthState.Loading -> Surface(Modifier.fillMaxSize()) {}
         AuthState.SignedOut -> LoginScreen(appVm)
         // La navigazione vive qui dentro: all'uscita viene scartata e il prossimo accesso riparte da Liste.
-        is AuthState.SignedIn -> MainContent(container, appVm)
+        is AuthState.SignedIn -> MainContent(container, appVm, updateVm)
+    }
+
+    if (update.dialogOpen) {
+        UpdateDialog(update, updateVm.currentVersion, onInstall = updateVm::install, onDismiss = updateVm::dismissDialog)
     }
 }
 
 @Composable
-private fun MainContent(container: AppContainer, appVm: AppViewModel) {
+private fun MainContent(container: AppContainer, appVm: AppViewModel, updateVm: UpdateViewModel) {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val destination = backStack?.destination
@@ -133,6 +155,7 @@ private fun MainContent(container: AppContainer, appVm: AppViewModel) {
                 composable(Routes.LISTS) {
                     ListsScreen(
                         appVm,
+                        updateVm,
                         onOpenList = { nav.navigate(Routes.list(it)) },
                         onOpenInvites = { nav.navigate(Routes.INVITES) },
                     )

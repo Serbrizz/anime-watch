@@ -25,6 +25,9 @@ anime consigliati in base ai generi già guardati. Dati anime da AniList, dati u
    del destinatario, che lo accetta o lo rifiuta; non scade, resta finché non viene accettato, rifiutato o ritirato.
    Accettata, la lista sta fra le sue con un contrassegno "Condivisa". Il progresso resta personale (punto 4):
    ognuno vede le proprie puntate. Ruoli e permessi in §5.
+10. **Aggiornamenti.** L'app si installa a mano (niente Play Store) e si aggiorna da sola dalle release GitHub (§13):
+   all'uscita di una versione mostra una volta il popup "Nuova versione disponibile" con le note; poi resta
+   "Aggiorna alla versione X" nel menu della schermata Liste, che mostra anche la versione installata.
 
 Fuori scopo per ora: notifiche sulle nuove puntate (anche per gli inviti), streaming/link ai player, social oltre alle
 liste condivise (commenti, profili pubblici), tracciamento dei voti personali, trasferimento della proprietà di una lista.
@@ -36,7 +39,7 @@ liste condivise (commenti, profili pubblici), tracciamento dei voti personali, t
 | Linguaggio | Kotlin | 2.0.20 |
 | UI | Jetpack Compose + Material 3 (Material You su Android 12+) | BOM 2024.09.03 |
 | Navigazione | Navigation Compose, rotte stringa | 2.8.2 |
-| Architettura | MVVM, `StateFlow`, un `AppViewModel` condiviso + un ViewModel per Cerca e per Consigliati | Lifecycle 2.8.6 |
+| Architettura | MVVM, `StateFlow`, un `AppViewModel` condiviso + un ViewModel per Cerca, Consigliati e aggiornamenti | Lifecycle 2.8.6 |
 | DI | Manuale (`di/AppContainer.kt`), niente Hilt | — |
 | Backend utente | Firebase Auth (solo Google) + Cloud Firestore + Crashlytics | BoM 33.4.0, plugin Crashlytics 3.0.2 |
 | Accesso Google | Credential Manager (`androidx.credentials`) + Google ID | 1.3.0 / 1.1.1 |
@@ -74,9 +77,10 @@ app/src/main/java/com/example/animewatch/
 │  ├─ firebase/ListDataSource  liste (anche condivise), membri, inviti, migrazione dal vecchio formato
 │  ├─ firebase/UserDataSource  progressi (flussi in tempo reale)
 │  ├─ firebase/Mappers.kt      modelli <-> documenti Firestore
-│  └─ remote/
-│     ├─ anilist/              AniListApi (1 endpoint POST), AniListClient (query), DTO
-│     └─ openrouter/           OpenRouterApi (chat/completions)
+│  ├─ remote/
+│  │  ├─ anilist/              AniListApi (1 endpoint POST), AniListClient (query), DTO
+│  │  └─ openrouter/           OpenRouterApi (chat/completions)
+│  └─ update/                  AppUpdater (release GitHub, download, installer), GitHubApi, AppVersion (puro, testato)
 ├─ domain/
 │  ├─ RecommendationEngine     profilo generi + coseno (puro, testato)
 │  ├─ RecommendationService    candidati da AniList -> ranking -> riordino AI opzionale
@@ -86,6 +90,7 @@ app/src/main/java/com/example/animewatch/
    ├─ AppViewModel.kt          utente, liste, inviti, progressi, cache schede, azioni
    ├─ components/Common.kt     AnimeRow, CoverImage, MemberAvatar, AddToListDialog, EmptyState, etichette
    ├─ login/  lists/  invites/  detail/  search/  recs/   una cartella per schermata
+   ├─ update/                  UpdateViewModel (quando controllare, popup una volta per versione), UpdateDialog
    └─ theme/Theme.kt
 ```
 
@@ -97,7 +102,8 @@ importare nulla di Android (resta testabile sulla JVM).
 | Rotta | Contenuto |
 |---|---|
 | — (login) | Fuori dal NavHost: logo, pulsante "Accedi con Google", errore. Compare finché non c'è un utente |
-| `lists` | Elenco liste (n. anime, n. stagioni viste, contrassegno "Condivisa"), FAB "nuova lista", elimina (proprietario) o esci (altri) con conferma; nella barra "Inviti" con contatore ed "Esci" dall'account |
+| `lists` | Elenco liste (n. anime, n. stagioni viste, contrassegno "Condivisa"), FAB "nuova lista", elimina (proprietario) o esci (altri) con conferma; nella barra "Inviti" con contatore e un menu (pallino se c'è un aggiornamento): "Verifica aggiornamenti" / "Aggiorna alla versione X", "Esci dall'account", versione installata |
+| — (aggiornamento) | Popup fuori dal NavHost, anche sul login: versione nuova, note della release, avanzamento del download; "Aggiorna ora" / "Più tardi" |
 | `list/{listId}` | Anime della lista con barra di avanzamento e spunta se stagione vista; rimuovi dalla lista solo con permesso di modifica; icona condivisione |
 | `list/{listId}/members` | Membri con ruolo. Proprietario: invito per email + ruolo, inviti in attesa da ritirare, cambia ruolo / rimuovi membro. Altri: "Esci dalla lista" |
 | `invites` | Inviti ricevuti: lista, chi invita, ruolo; "Accetta" / "Rifiuta" |
@@ -172,6 +178,10 @@ Sempre `isAdult: false` dove si cerca. Limite ~90 richieste/minuto: le chiamate 
 Il modello riceve una **lista chiusa** di 30 candidati reali e deve restituire un array JSON `[{id, reason}]`:
 non può inventare titoli. Ogni anomalia (rete, JSON non valido, ID sconosciuti) => `null` => si usa l'algoritmo.
 
+**GitHub** — `GET https://api.github.com/repos/<appReleaseRepo>/releases/latest`, senza token (limite 60 richieste/ora
+per IP; l'app ne fa una ogni 6 ore): funziona solo se il repository è **pubblico**. Con un repository privato risponde
+404 e l'app crede semplicemente che non ci siano release. L'APK si scarica da `browser_download_url` dell'allegato.
+
 ## 7. Algoritmo dei consigliati
 
 1. **Profilo.** Per ogni anime con puntate viste, peso = frazione vista (minimo 0,2); si somma il peso a ognuno dei suoi generi
@@ -190,9 +200,9 @@ non può inventare titoli. Ogni anomalia (rete, JSON non valido, ID sconosciuti)
 ### Firebase (obbligatorio)
 1. Console Firebase -> nuovo progetto -> aggiungi app Android con package `com.example.animewatch`.
 2. Authentication -> metodo di accesso -> abilita **Google** (crea il client OAuth web usato dall'app).
-3. Registra lo SHA-1 del keystore che firma l'APK (debug: `keytool -list -v -keystore ~/.android/debug.keystore
-   -alias androiddebugkey -storepass android`) con `firebase apps:android:sha:create <APP_ID> <SHA1>` o dalle
-   impostazioni dell'app in console. Senza, il selettore Google fallisce. Per la release va aggiunto anche lo SHA-1 di release.
+3. Registra lo SHA-1 del keystore condiviso (sotto, "Firma degli APK") con `firebase apps:android:sha:create <APP_ID> <SHA1>`
+   o dalle impostazioni dell'app in console. Senza, il selettore Google fallisce. È già registrato: è l'unico SHA-1
+   dell'app, e non se ne aggiungono altri perché tutti firmano con lo stesso keystore.
 4. Scarica `google-services.json` in `app/` **dopo** i passi 2 e 3, altrimenti manca il client OAuth (`oauth_client` vuoto)
    e l'accesso dà "client OAuth mancante". È nel `.gitignore`; `app/google-services.json.example` mostra il formato.
 5. Firestore Database -> crea in modalità produzione, poi pubblica le regole: `firebase deploy --only firestore:rules`
@@ -204,14 +214,25 @@ Attivo in debug e in release, senza configurazione: i crash arrivano in console 
 dell'app, con l'UID dell'utente come identificatore. Anche gli errori di accesso con Google, che l'app mostra a schermo
 senza crashare, sono registrati come *non fatali* (`AuthDataSource.signInWithGoogle`).
 
-### OpenRouter (opzionale)
+### Firma degli APK (obbligatorio)
+Tutti gli APK, debug e release, su ogni PC, sono firmati con **lo stesso keystore**, SHA-1 `appSigningSha1` in
+`gradle.properties`. Così l'accesso con Google funziona a tutti con un solo SHA-1 su Firebase, e chiunque può fare una
+release che si installa sopra le precedenti (Android accetta un aggiornamento solo con la stessa firma). Il keystore sta
+**fuori dal repo** e lo passa in privato chi gestisce le release; `keystore.properties` (ignorato da git, modello in
+`keystore.properties.example`) indica dove si trova. Gradle (`verifySigningKey`, prima di ogni build) si ferma se il file
+manca o se lo SHA-1 è diverso. La CI fa eccezione: compila senza segreti e non distribuisce nulla. La firma **non deve
+cambiare mai**. Dà accesso anche a tutto ciò che è firmato con lo stesso keystore: va condiviso solo con chi fa le release.
+
+### OpenRouter
 Copia `local.properties.example` in `local.properties` e imposta `OPENROUTER_API_KEY` (e se vuoi `OPENROUTER_MODEL`).
-Senza chiave l'interruttore AI non compare. La chiave finisce in `BuildConfig`: **non committare mai `local.properties`**.
+Senza chiave l'interruttore AI non compare: per lo sviluppo è opzionale. Le **release** invece includono la chiave
+condivisa: `verifyReleaseConfig` controlla che il suo SHA-256 sia `openRouterKeySha256` di `gradle.properties` (nel
+repo c'è solo l'impronta, mai la chiave). Se la chiave si cambia, va aggiornata l'impronta. La chiave finisce in
+`BuildConfig`: **non committare mai `local.properties`**.
 
 ### Build e test
 ```
-gradle wrapper --gradle-version 8.9      # una volta sola, genera gradlew (il .jar non è nel repo)
-./gradlew :app:testDebugUnitTest          # unit test del motore di raccomandazione
+./gradlew :app:testDebugUnitTest          # unit test (raccomandazioni, liste condivise, versioni)
 ./gradlew :app:assembleDebug              # APK in app/build/outputs/apk/debug/
 .\install.ps1 [-Release] [-Serial <id>]   # git fetch + pull --ff-only, build, adb install -r sul telefono collegato
 ```
@@ -222,8 +243,11 @@ Android Studio (Koala o successivo) apre la cartella e fa tutto da solo. La CI (
 
 ## 9. Sicurezza e limiti noti
 
-- **Chiave OpenRouter nell'APK.** Chi decompila l'app può estrarla. Va bene per uso personale con un limite di spesa impostato su
-  OpenRouter; per distribuire l'app la chiamata deve passare da un proxy (Cloud Function) che custodisce la chiave.
+- **Chiave OpenRouter nell'APK.** Le release la includono e sono scaricabili da chiunque dalla pagina GitHub: chi decompila
+  l'APK può estrarla. Per questo serve un limite di spesa su OpenRouter. Per toglierla dall'APK la chiamata deve passare
+  da un proxy (Cloud Function) che custodisce la chiave.
+- **Aggiornamenti.** Il repository delle release deve essere pubblico (§6). L'APK scaricato è verificato con dimensione e
+  sha256 di GitHub; Android stesso rifiuta un APK con firma diversa o `versionCode` non maggiore.
 - **Cache `anime/` scrivibile dai client.** Le regole limitano forma e tipi ma un utente malevolo potrebbe scrivere dati falsi
   su un ID. Mitigazione futura: Firebase App Check, oppure scrittura solo da Cloud Function.
 - **Solo accesso con Google.** L'UID è legato all'account Google, quindi liste e progressi seguono l'utente su ogni
@@ -248,8 +272,14 @@ Verificato (10/11/2026):
   "fri" non trova nulla, "frieren" sì.
 - Accesso con Google funzionante dopo aver registrato lo SHA-1 di debug.
 
+Verificato (11/11/2026):
+- `assembleRelease` firma con il keystore condiviso (SHA-1 controllato con apksigner); `versionCode`/`versionName` arrivano da `appVersion`.
+- `verifySigningKey` ferma la build con un keystore diverso o senza `keystore.properties`.
+
 Da verificare:
 1. Su dispositivo, con due account Google: invito, accettazione, rifiuto, sola visualizzazione, uscita, modalità aereo.
+2. Aggiornamento completo (popup, download, permesso "installa app sconosciute", installazione): possibile solo con il
+   repository pubblico e almeno due release.
 
 Le regole di `lists/` e `invites/` sono provate nell'emulatore Firestore con `@firebase/rules-unit-testing`
 (66 casi: creazione, lettura, inviti, ingresso con ruolo giusto e sbagliato, editor, viewer, rifiuto, ritiro,
@@ -270,3 +300,27 @@ poteri e limiti del proprietario, eliminazione, migrazione). Il test non è nel 
 - Messaggi di commit: una sola riga, Conventional Commits con gitmoji, in inglese, all'imperativo e in minuscolo, senza scope, body o trailer (niente `Co-Authored-By`). Brevi e diretti: cosa cambia, non perché né come. Esempi: `feat: ✨ add deploy for tagged releases`, `fix: 🐛 display sign-in errors`, `feat: ✨ use checkboxes for dish markers`.
 - Le modifiche a questo file (`CLAUDE.md`) vanno nel commit che implementa ciò che descrivono: niente commit `docs` separati, niente fixup del commit che le ha introdotte.
 - Commit, push e riscritture della history solo su richiesta.
+- Il commit di release (`chore: 🔖 release X.Y.Z`) lo crea solo `release.ps1` (§13), mai a mano.
+
+## 13. Release e aggiornamenti
+
+- **Versione:** unica fonte `appVersion` in `gradle.properties`. `versionName` è `appVersion`, `versionCode` è
+  `major·10000 + minor·100 + patch` (minor e patch sotto 100). La incrementa solo lo script.
+- **Pubblicare** (Windows, da `main` dopo il merge di `dev`): `.\release.cmd patch|minor|major`. Lo script lo lancia chi
+  fa la release, non Claude. Richiede `keystore.properties`, il vero `app/google-services.json`, la chiave OpenRouter
+  condivisa in `local.properties` e GitHub CLI autenticata con permesso di push (`gh auth login`).
+  1. Controlla branch pulito e allineato a origin, `dev` già unito, tag libero e `:app:verifyReleaseConfig`.
+     Poi apre il Blocco note per le note di rilascio, che compaiono nel popup dell'app.
+  2. Incrementa `appVersion`.
+  3. Lancia gli unit test e `assembleRelease`, copia in `build\release\AnimeWatch.apk` e controlla la firma con apksigner.
+  4. Dopo conferma: commit, tag annotato `vX.Y.Z` e push atomico di `main` e tag.
+  5. Con `gh release create` crea su `appReleaseRepo` una release (non pre-release) con l'allegato `AnimeWatch.apk`,
+     **nome esatto**.
+  6. Porta `dev` (locale e origin) al commit di release, se è un avanzamento semplice.
+  Se fallisce prima del commit, rimette `gradle.properties` e `build\release` com'erano.
+- **Nell'app** (`AppUpdater` + `UpdateViewModel`): il controllo avviene all'avvio e a ogni ritorno nell'app, al massimo
+  ogni 6 ore dopo un controllo riuscito o ogni 2 minuti dopo uno fallito. Si confronta il tag dell'ultima release con
+  `BuildConfig.VERSION_NAME`. Il popup compare una volta per versione (`seenVersion` nelle SharedPreferences "update").
+  L'APK si scarica in `files/update/` (file `.part`, verificato, poi rinominato) e si apre l'installer via FileProvider
+  (`res/xml/update_paths.xml`). La prima volta Android chiede il permesso "installa app sconosciute" e l'installer parte
+  al ritorno nell'app. Il vecchio APK si cancella all'avvio successivo.

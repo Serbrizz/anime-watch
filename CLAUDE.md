@@ -213,7 +213,10 @@ Senza chiave l'interruttore AI non compare. La chiave finisce in `BuildConfig`: 
 gradle wrapper --gradle-version 8.9      # una volta sola, genera gradlew (il .jar non è nel repo)
 ./gradlew :app:testDebugUnitTest          # unit test del motore di raccomandazione
 ./gradlew :app:assembleDebug              # APK in app/build/outputs/apk/debug/
+.\install.ps1 [-Release] [-Serial <id>]   # git fetch + pull --ff-only, build, adb install -r sul telefono collegato
 ```
+`install.ps1` controlla git, adb e telefono prima di iniziare e si ferma al primo errore indicando passo e motivo
+(anche con Ctrl+C); il pull è solo fast-forward, quindi con branch divergenti non fa merge.
 Android Studio (Koala o successivo) apre la cartella e fa tutto da solo. La CI (`.github/workflows/build.yml`) usa il
 `google-services.json.example` come segnaposto, quindi compila senza segreti.
 

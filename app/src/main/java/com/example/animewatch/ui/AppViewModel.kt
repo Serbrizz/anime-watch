@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -71,8 +72,16 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    /** null finché non arriva la prima lettura (anche solo dalla cache locale): "nessuna lista" va detto solo dopo. */
+    private val listsOrNull: StateFlow<List<AnimeList>?> =
+        perUser(emptyList(), "delle liste", initial = null) { container.listData.observeLists(it.uid) }
+
     /** Tutte le liste di cui l'utente è membro: sue e condivise con lui. */
-    val lists: StateFlow<List<AnimeList>> = perUser(emptyList(), "delle liste") { container.listData.observeLists(it.uid) }
+    val lists: StateFlow<List<AnimeList>> = listsOrNull.map { it.orEmpty() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val listsLoaded: StateFlow<Boolean> = listsOrNull.map { it != null }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /** Solo le liste in cui l'utente può aggiungere anime (non quelle in sola visualizzazione). */
     val editableLists: StateFlow<List<AnimeList>> = combine(lists, user) { all, u -> all.filter { it.canEdit(u?.uid) } }
@@ -95,6 +104,13 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     private val _resolving = MutableStateFlow<Set<Int>>(emptySet())
     val resolving: StateFlow<Set<Int>> = _resolving.asStateFlow()
 
+    /**
+     * ID la cui ultima risoluzione è finita senza franchise (es. offline e non in cache): non sono più in attesa.
+     * Senza questo insieme, "non ancora risolto" e "fallito" sarebbero indistinguibili prima che parta la richiesta.
+     */
+    private val _unresolved = MutableStateFlow<Set<Int>>(emptySet())
+    val unresolved: StateFlow<Set<Int>> = _unresolved.asStateFlow()
+
     /** Invito che si sta accettando (per mostrare l'attesa sul pulsante giusto). */
     private val _accepting = MutableStateFlow<String?>(null)
     val accepting: StateFlow<String?> = _accepting.asStateFlow()
@@ -111,20 +127,28 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     /**
      * Flusso legato all'utente collegato. Il catch sta dentro flatMapLatest: un errore chiude solo il
      * flusso di quell'utente, non quello esterno, così dopo un nuovo accesso la sincronizzazione riparte.
+     * [initial] è il valore finché la prima lettura non arriva; [empty] quello senza utente o dopo un errore.
      */
-    private fun <T> perUser(empty: T, what: String, source: (UserProfile) -> Flow<T>): StateFlow<T> = user
+    private fun <T> perUser(
+        empty: T,
+        what: String,
+        initial: T = empty,
+        source: (UserProfile) -> Flow<T>,
+    ): StateFlow<T> = user
         .distinctUntilChangedBy { it?.uid }
         .flatMapLatest { u ->
             if (u == null) {
                 flowOf(empty)
             } else {
-                source(u).catch {
-                    reportSyncError(u.uid, "Sincronizzazione $what non riuscita: ${it.message}")
-                    emit(empty)
-                }
+                source(u)
+                    .onStart { emit(initial) }
+                    .catch {
+                        reportSyncError(u.uid, "Sincronizzazione $what non riuscita: ${it.message}")
+                        emit(empty)
+                    }
             }
         }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, empty)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, initial)
 
     /** All'uscita i listener del vecchio utente possono fallire per permessi: quell'errore non va mostrato. */
     private fun reportSyncError(forUid: String, message: String) {
@@ -200,10 +224,12 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         val missing = ids.filter { it !in _franchises.value && it !in _resolving.value }.distinct()
         if (missing.isEmpty()) return
         _resolving.update { it + missing }
+        _unresolved.update { it - missing.toSet() }
         viewModelScope.launch {
             try {
                 resolve(missing)
             } finally {
+                _unresolved.update { it + missing.filter { id -> id !in _franchises.value } }
                 _resolving.update { it - missing.toSet() }
             }
         }

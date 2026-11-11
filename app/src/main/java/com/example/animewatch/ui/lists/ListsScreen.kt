@@ -1,10 +1,12 @@
 package com.example.animewatch.ui.lists
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -17,6 +19,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -48,6 +51,7 @@ import com.example.animewatch.ui.components.roleLabel
 @Composable
 fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
     val lists by vm.lists.collectAsStateWithLifecycle()
+    val listsLoaded by vm.listsLoaded.collectAsStateWithLifecycle()
     val progress by vm.progress.collectAsStateWithLifecycle()
     val animeMap by vm.anime.collectAsStateWithLifecycle()
     val me by vm.user.collectAsStateWithLifecycle()
@@ -55,6 +59,7 @@ fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
     var toDelete by remember { mutableStateOf<AnimeList?>(null) }
 
     val franchises by vm.franchises.collectAsStateWithLifecycle()
+    val unresolved by vm.unresolved.collectAsStateWithLifecycle()
 
     // Servono tutte le stagioni di ogni serie per sapere quante sono davvero concluse.
     LaunchedEffect(lists) { vm.ensureFranchises(lists.flatMap { it.animeIds }) }
@@ -68,7 +73,11 @@ fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
             }
         },
     ) { padding ->
-        if (lists.isEmpty()) {
+        if (!listsLoaded) {
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else if (lists.isEmpty()) {
             EmptyState(
                 "Nessuna lista. Tocca + per crearne una, poi aggiungi anime dalla scheda Cerca. " +
                     "Gli inviti alle liste condivise li trovi nel Profilo, in alto a destra.",
@@ -85,6 +94,9 @@ fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
                     val seen = groups.flatMap { it.seasonIds }.count { id ->
                         animeMap[id]?.isSeasonComplete(progress[id]?.watchedEpisodes?.size ?: 0) == true
                     }
+                    // Le stagioni arrivano a ondate: i conteggi si mostrano solo a serie tutte ricostruite,
+                    // altrimenti crescono sotto gli occhi. Chi non si è potuto risolvere non tiene in attesa.
+                    val loading = list.animeIds.any { it !in franchises && it !in unresolved }
                     ElevatedCard(onClick = { onOpenList(list.id) }, modifier = Modifier.fillMaxWidth()) {
                         Row(
                             Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
@@ -92,11 +104,17 @@ fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text(list.name, style = MaterialTheme.typography.titleMedium)
-                                Text(
-                                    "${groups.size} anime · $seen stagioni viste",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    val style = MaterialTheme.typography.bodyMedium
+                                    val color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    Text("${groups.size} anime · ", style = style, color = color)
+                                    if (loading) {
+                                        CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                                        Text(" stagioni viste", style = style, color = color)
+                                    } else {
+                                        Text("$seen stagioni viste", style = style, color = color)
+                                    }
+                                }
                                 SharedMarker(list, me?.uid)
                             }
                             IconButton(onClick = { toDelete = list }) {

@@ -136,7 +136,7 @@ importare nulla di Android (resta testabile sulla JVM).
 | — (login) | Fuori dal NavHost: logo, pulsante "Accedi con Google", errore. Compare finché non c'è un utente |
 | — (barra in alto) | Una sola, in `AnimeWatchRoot`: titolo e azioni dalla schermata (`ScreenBar`), freccia indietro fuori dalle sezioni della barra in basso, foto del profilo a destra tranne che nelle pagine `profile…` |
 | — (barra in basso) | Liste, Cerca, Consigliati su ogni schermata tranne le pagine `profile…`. È accesa la sezione da cui si è arrivati (l'ultima radice nello stack); ogni sezione conserva il proprio stack, e ritoccare quella attiva riporta alla sua radice |
-| `lists` | Elenco liste (n. anime, n. stagioni viste, contrassegno "Condivisa"), FAB "nuova lista", elimina (proprietario) o esci (altri) con conferma |
+| `lists` | Indicatore di attesa finché non arriva la prima lettura delle liste (il messaggio "Nessuna lista" solo dopo). Elenco liste (n. anime, n. stagioni viste, contrassegno "Condivisa"; al posto del numero di stagioni viste un indicatore di attesa finché le serie della lista non sono tutte ricostruite o fallite), FAB "nuova lista", elimina (proprietario) o esci (altri) con conferma |
 | `profile` | Foto, nome, email; "Inviti" (quanti in attesa), "Aggiornamenti" (versione installata, "Aggiorna" se ce n'è una nuova), "Esci dall'account" con conferma |
 | `profile/updates` | Versione installata e nuova; "Aggiorna alla versione X" (apre il popup) oppure "Verifica aggiornamenti" |
 | — (aggiornamento) | Popup fuori dal NavHost, anche sul login: versione nuova, note della release, avanzamento del download; "Aggiorna ora" / "Più tardi" |

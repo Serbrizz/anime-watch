@@ -144,7 +144,7 @@ importare nulla di Android (resta testabile sulla JVM).
 | `list/{listId}/members` | Membri con ruolo. Proprietario: invito per email + ruolo, inviti in attesa da ritirare, cambia ruolo / rimuovi membro. Altri: "Esci dalla lista" |
 | `list/{listId}/search` | La ricerca di `search` legata alla lista (titolo "Aggiungi a …", tastiera aperta all'arrivo): il "+" aggiunge la serie alla lista e diventa una spunta che la toglie. Se la lista sparisce o non è più modificabile torna la ricerca normale |
 | `profile/invites` | Inviti ricevuti: lista, chi invita, ruolo; "Accetta" / "Rifiuta" |
-| `anime/{animeId}` | Copertina, generi, trama, "Aggiungi a una lista" (aggiunge la serie), sotto il menu a tendina "Stagione" (se più d'una: etichetta, titolo, spunta sulle viste), griglia di chip per puntata, "Segna tutte"/"Azzera" |
+| `anime/{animeId}` | Copertina, generi, trama, "Aggiungi a una lista" (aggiunge la serie), sotto il menu a tendina "Stagione" (se più d'una: etichetta, titolo, spunta sulle viste; c'è da subito se la scheda ha prequel/sequel e, finché le stagioni caricano, mostra il titolo di quella aperta e un indicatore di attesa), griglia di chip per puntata, "Segna tutte"/"Azzera" |
 | `search` | Campo di ricerca, una riga per serie dalla più popolare (la sua stagione più popolare fra i risultati) con "+" per aggiungere a una lista; sopra, l'avviso se si è cercato senza l'ultima parola |
 | — (pannello "Aggiungi a una lista") | Dal "+" di Cerca e Consigliati e dal pulsante della scheda: copertina e titolo, una scheda per lista modificabile da accendere/spegnere (vale per la serie), "Nuova lista con questo anime", "Fatto" |
 | `recs` | Generi dominanti, interruttore "Affina con AI" (solo se il proxy è configurato; disattivato con "Non disponibile al momento" se il preflight dice no), elenco con affinità % e motivo |
@@ -204,7 +204,10 @@ in `lists/` con lo stesso ID e cancella le vecchie; quando non ce ne sono più, 
   si incrementa quando cambia ciò che si ricava da AniList, altrimenti le schede vecchie restano fino alla scadenza.
   Se AniList non risponde si usa il dato scaduto.
 - **Franchise.** Non si salvano: si ricostruiscono nel client seguendo `prequelIds`/`sequelIds` (`getWithRelated`, una
-  `getMany` per livello della catena, al massimo 30 livelli e 300 schede). La lista salva la stagione uscita per prima;
+  `getMany` per livello della catena, al massimo 30 livelli e 300 schede). Ogni livello legge prima la copia di `anime/`
+  sul dispositivo (`Source.CACHE`) e va al server solo per le schede mancanti o scadute: con la rete un `get()` normale
+  andrebbe sempre al server, un'andata e ritorno per livello. Le serie già complete si pubblicano a ogni livello, senza
+  aspettare la catena più lunga (`Franchise.groupComplete`). La lista salva la stagione uscita per prima;
   aggiungere un'altra stagione della stessa serie non cambia nulla, togliere la serie toglie tutte le sue stagioni.
   Le liste di prima possono avere più stagioni della stessa serie: si mostrano come una riga sola, senza migrazione.
   Il progresso resta per stagione (`users/{uid}/progress/{anilistId}`).

@@ -38,6 +38,15 @@ class FranchiseTest {
     }
 
     @Test
+    fun `groupComplete tiene solo i franchise senza stagioni ancora da caricare`() {
+        // Caricate S3 e S2; il film (20), che S2 cita come prequel, è in arrivo. L'altra serie è già completa.
+        val partial = listOf(s3, s2, other).associateBy { it.id }
+        val complete = Franchise.groupComplete(partial, pending = setOf(20))
+        assertEquals(setOf(99), complete.keys)
+        assertEquals(Franchise.group(all)[10], Franchise.groupComplete(all, pending = emptySet())[10])
+    }
+
+    @Test
     fun `collapse unisce le stagioni anche attraverso una scheda assente e mantiene l'ordine`() {
         // Senza il film: S1 lo cita come sequel e S2 come prequel, quindi si ritrovano lo stesso.
         val groups = Franchise.collapse(listOf(s2, other, s1, s3)) { it }

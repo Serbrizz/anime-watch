@@ -44,6 +44,15 @@ data class Franchise(
         }
 
         /**
+         * Come [group], ma solo i franchise già completi: nessuna loro stagione cita una scheda ancora da
+         * caricare ([pending]). Così le serie brevi si mostrano senza aspettare la catena più lunga.
+         */
+        fun groupComplete(animes: Map<Int, Anime>, pending: Set<Int>): Map<Int, Franchise> =
+            group(animes).filterValues { franchise ->
+                franchise.seasonIds.none { id -> animes.getValue(id).relatedIds.any { it in pending } }
+            }
+
+        /**
          * Raggruppa per serie un elenco di risultati (ricerca, consigli) senza richieste di rete: due elementi
          * sono la stessa serie se sono collegati come prequel/sequel, anche passando da una stagione che non è
          * nell'elenco (S1 e S3 si ritrovano attraverso l'ID della S2, che entrambi citano), oppure se stanno

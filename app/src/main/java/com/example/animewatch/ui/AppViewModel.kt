@@ -91,8 +91,9 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     private val _franchises = MutableStateFlow<Map<Int, Franchise>>(emptyMap())
     val franchises: StateFlow<Map<Int, Franchise>> = _franchises.asStateFlow()
 
-    /** ID in corso di risoluzione: evita di ripercorrere la stessa catena da più schermate. Solo main thread. */
-    private val resolving = HashSet<Int>()
+    /** ID in corso di risoluzione: evita di ripercorrere la stessa catena da più schermate e mostra l'attesa. */
+    private val _resolving = MutableStateFlow<Set<Int>>(emptySet())
+    val resolving: StateFlow<Set<Int>> = _resolving.asStateFlow()
 
     /** Invito che si sta accettando (per mostrare l'attesa sul pulsante giusto). */
     private val _accepting = MutableStateFlow<String?>(null)
@@ -196,24 +197,32 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     /** Carica le schede e tutte le stagioni dei loro franchise (per le liste e per il selettore di stagione). */
     fun ensureFranchises(ids: Collection<Int>) {
-        val missing = ids.filter { it !in _franchises.value && it !in resolving }.distinct()
+        val missing = ids.filter { it !in _franchises.value && it !in _resolving.value }.distinct()
         if (missing.isEmpty()) return
-        resolving += missing
+        _resolving.update { it + missing }
         viewModelScope.launch {
             try {
                 resolve(missing)
             } finally {
-                resolving -= missing.toSet()
+                _resolving.update { it - missing.toSet() }
             }
         }
     }
 
+    /** Le serie già complete si pubblicano a ogni ondata, le altre alla fine (anche se i limiti le hanno troncate). */
     private suspend fun resolve(ids: Collection<Int>): Map<Int, Franchise> {
-        val related = container.animeRepo.getWithRelated(ids)
+        val related = container.animeRepo.getWithRelated(ids) { found, pending ->
+            publish(found, Franchise.groupComplete(found, pending))
+        }
         val groups = Franchise.group(related)
-        _anime.update { it + related }
-        _franchises.update { it + groups }
+        publish(related, groups)
         return groups
+    }
+
+    private fun publish(animes: Map<Int, Anime>, groups: Map<Int, Franchise>) {
+        if (groups.isEmpty()) return
+        _anime.update { it + groups.keys.associateWith { id -> animes.getValue(id) } }
+        _franchises.update { it + groups }
     }
 
     /** Senza rete la catena può restare incompleta: la scheda vale allora come franchise a sé. */

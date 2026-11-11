@@ -7,6 +7,7 @@ import com.example.animewatch.data.model.Anime
 import com.example.animewatch.data.remote.anilist.AniListClient
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -47,21 +48,15 @@ class AnimeRepository(
             memory[id]?.takeIf { !it.isStale() }?.let { result[id] = it }
         }
 
-        // Livello 2: Firestore, 30 ID per query (limite di whereIn), query in parallelo.
+        // Livello 2: Firestore. Prima la copia sul dispositivo, poi il server solo per ciò che manca o è scaduto:
+        // con la rete `get()` va sempre al server, e una catena di stagioni ne pagherebbe uno per livello.
         val stale = HashMap<Int, Anime>()
-        val cached = coroutineScope {
-            wanted.filter { it !in result }.chunked(30).map { chunk ->
-                async {
-                    runCatching {
-                        collection.whereIn(FieldPath.documentId(), chunk.map { it.toString() }).get().await()
-                            .documents.mapNotNull { it.toAnime() }
-                    }.onFailure { logOrRethrow("Lettura cache Firestore fallita", it) }
-                        .getOrDefault(emptyList())
-                }
-            }.awaitAll().flatten()
-        }
-        for (anime in cached) {
-            if (anime.isStale()) stale[anime.id] = anime else result[anime.id] = anime
+        for (source in FIRESTORE_SOURCES) {
+            val missing = wanted.filter { it !in result }
+            if (missing.isEmpty()) break
+            for (anime in readFirestore(missing, source)) {
+                if (anime.isStale()) stale[anime.id] = anime else result[anime.id] = anime
+            }
         }
 
         // Livello 3: AniList per ciò che manca o è scaduto, 50 ID per richiesta, in parallelo (di rado più d'una).
@@ -84,14 +79,31 @@ class AnimeRepository(
         return result
     }
 
+    /** 30 ID per query (limite di whereIn), query in parallelo. */
+    private suspend fun readFirestore(ids: List<Int>, source: Source): List<Anime> = coroutineScope {
+        ids.chunked(30).map { chunk ->
+            async {
+                runCatching {
+                    collection.whereIn(FieldPath.documentId(), chunk.map { it.toString() }).get(source).await()
+                        .documents.mapNotNull { it.toAnime() }
+                }.onFailure { logOrRethrow("Lettura cache Firestore fallita ($source)", it) }
+                    .getOrDefault(emptyList())
+            }
+        }.awaitAll().flatten()
+    }
+
     suspend fun get(id: Int): Anime? = getMany(listOf(id))[id]
 
     /**
      * Le schede richieste più tutte quelle raggiungibili come prequel/sequel: le stagioni dei loro franchise.
      * Si procede a ondate, una [getMany] per livello della catena con gli ID di tutti i franchise insieme,
      * così una lista intera costa poche richieste. I limiti fermano le catene lunghissime.
+     * Dopo ogni ondata [onWave] riceve le schede trovate finora e gli ID ancora da caricare.
      */
-    suspend fun getWithRelated(ids: Collection<Int>): Map<Int, Anime> {
+    suspend fun getWithRelated(
+        ids: Collection<Int>,
+        onWave: (found: Map<Int, Anime>, pending: Set<Int>) -> Unit = { _, _ -> },
+    ): Map<Int, Anime> {
         val result = HashMap<Int, Anime>()
         val visited = HashSet<Int>()
         var frontier = ids.toSet()
@@ -101,6 +113,7 @@ class AnimeRepository(
             val found = getMany(frontier)
             result.putAll(found)
             frontier = found.values.flatMap { it.relatedIds }.filterTo(HashSet()) { it !in visited }
+            if (frontier.isNotEmpty()) onWave(result.toMap(), frontier)
         }
         return result
     }
@@ -126,5 +139,6 @@ class AnimeRepository(
         const val TAG = "AnimeRepository"
         const val MAX_HOPS = 30
         const val MAX_RELATED = 300
+        val FIRESTORE_SOURCES = listOf(Source.CACHE, Source.DEFAULT)
     }
 }

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -62,11 +63,15 @@ fun AnimeDetailScreen(vm: AppViewModel, animeId: Int) {
     val animeMap by vm.anime.collectAsStateWithLifecycle()
     val progress by vm.progress.collectAsStateWithLifecycle()
     val franchises by vm.franchises.collectAsStateWithLifecycle()
+    val resolving by vm.resolving.collectAsStateWithLifecycle()
     // Si apre sulla stagione richiesta; il selettore cambia solo quella mostrata, non la rotta.
     var selectedId by rememberSaveable(animeId) { mutableIntStateOf(animeId) }
     val anime = animeMap[selectedId]
-    val seasons = (franchises[animeId]?.seasonIds ?: listOf(animeId)).mapNotNull { animeMap[it] }
+    val franchise = franchises[animeId]
+    val seasons = (franchise?.seasonIds ?: listOf(animeId)).mapNotNull { animeMap[it] }
     val labels = remember(seasons) { Franchise.seasonLabels(seasons) }
+    // Il selettore c'è da subito se la scheda ha prequel o sequel: così l'arrivo delle stagioni non sposta la pagina.
+    val hasSeasons = seasons.size > 1 || animeMap[animeId]?.relatedIds?.isNotEmpty() == true
     var showAddSheet by rememberSaveable { mutableStateOf(false) }
     var expanded by rememberSaveable(selectedId) { mutableStateOf(false) }
 
@@ -147,11 +152,13 @@ fun AnimeDetailScreen(vm: AppViewModel, animeId: Int) {
             }
 
             // Selettore di stagione: le puntate sotto sono quelle della stagione scelta.
-            if (seasons.size > 1) {
+            if (hasSeasons) {
                 item(span = fullWidth) {
                     SeasonSelector(
                         seasons = seasons,
-                        labels = labels,
+                        // Senza il franchise l'etichetta (S1, S2…) non si conosce: non si indovina.
+                        labels = labels.takeIf { franchise != null },
+                        loading = franchise == null && animeId in resolving,
                         selectedId = selectedId,
                         isSeen = { it.isSeasonComplete(progress[it.id]?.watchedEpisodes?.size ?: 0) },
                         onSelect = { selectedId = it },
@@ -220,11 +227,16 @@ fun AnimeDetailScreen(vm: AppViewModel, animeId: Int) {
     }
 }
 
-/** Menu a tendina con le stagioni della serie: etichetta (S1, Film…), titolo della scheda e spunta se vista. */
+/**
+ * Menu a tendina con le stagioni della serie: etichetta (S1, Film…), titolo della scheda e spunta se vista.
+ * Finché le stagioni non sono note ([labels] null) mostra il titolo di quella aperta e non si apre;
+ * durante il caricamento, al posto della freccia, un indicatore di attesa.
+ */
 @Composable
 private fun SeasonSelector(
     seasons: List<Anime>,
-    labels: List<String>,
+    labels: List<String>?,
+    loading: Boolean,
     selectedId: Int,
     isSeen: (Anime) -> Boolean,
     onSelect: (Int) -> Unit,
@@ -232,18 +244,24 @@ private fun SeasonSelector(
     var open by remember { mutableStateOf(false) }
     val selected = seasons.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)
 
-    ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
+    ExposedDropdownMenuBox(expanded = open && labels != null, onExpandedChange = { open = it && labels != null }) {
         OutlinedTextField(
-            value = labels[selected],
+            value = labels?.get(selected) ?: seasons.getOrNull(selected)?.englishOrRomaji.orEmpty(),
             onValueChange = {},
             readOnly = true,
             singleLine = true,
             label = { Text("Stagione") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
+            trailingIcon = {
+                when {
+                    loading -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    labels != null -> ExposedDropdownMenuDefaults.TrailingIcon(expanded = open)
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .menuAnchor(MenuAnchorType.PrimaryNotEditable),
         )
+        if (labels == null) return@ExposedDropdownMenuBox
         ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             seasons.forEachIndexed { i, season ->
                 DropdownMenuItem(

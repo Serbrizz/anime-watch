@@ -16,6 +16,9 @@ captures/
 # Firebase: config reale (usa il file .example come modello)
 app/google-services.json
 
+# Note di lavoro locali
+/docs/
+
 # Sistema
 .DS_Store
 Thumbs.db

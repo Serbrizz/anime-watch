@@ -152,6 +152,7 @@ proxy/                          Cloudflare Worker "animewatch-ai" (fuori dall'ap
 
 scripts/                        tutti gli script e i comandi di sviluppo (PowerShell, Windows), lanciati dalla radice del repo
 ├─ gui.ps1                      finestra che elenca gli altri script e li lancia (§8, "Script e GUI"); si apre con gui.cmd nella radice
+├─ fonts/                       font della finestra (M PLUS Rounded 1c, Nunito; OFL), ridotti ai caratteri usati
 ├─ install.ps1  pair-wifi.ps1  logcat.ps1          telefono
 ├─ test.ps1  build.ps1                             app (Gradle)
 ├─ deploy-rules.ps1                                regole Firestore
@@ -435,14 +436,21 @@ Android Studio (Koala o successivo) apre la cartella e fa tutto da solo. La CI (
 Ogni script o comando di sviluppo sta in `scripts/` (versionata), come `.ps1`; la radice del repo per lo script è
 `Split-Path -Parent $PSScriptRoot`. Unica eccezione `gui.cmd`, nella radice per trovarlo subito: anche con doppio clic
 (da Esplora file: VS Code apre i file, non li esegue) apre `scripts\gui.ps1`, una finestra WPF in stile anime
-giapponese (cielo di notte, colori piatti con contorni scuri e ombre nette, niente bagliori; font Yu Gothic UI) che li
-elenca e li lancia **al suo interno**: un `powershell` nascosto con input e output redirezionati (`AwRunner`, compilato
+giapponese (cielo di notte, colori piatti con contorni scuri e ombre nette, niente bagliori) che li elenca e li lancia
+**al suo interno**: un `powershell` nascosto con input e output redirezionati (`AwRunner`, compilato
 con `Add-Type`), l'output colorato nel pannello in basso, una scheda per esecuzione con lo stato, un campo per
 rispondere quando lo script fa una domanda e "Ferma", che chiude lo script e i suoi processi tranne il server adb (terrebbe
 giù il Wi-Fi del telefono) e il daemon di Gradle. "In una console" lo apre invece in una finestra PowerShell separata.
+Il font della finestra si sceglie col pulsante in basso a sinistra (M PLUS Rounded 1c, il predefinito, Nunito,
+Bahnschrift o Yu Gothic UI; l'output resta in Consolas) e si ricorda per utente in `%APPDATA%\animewatch-scripts\gui.json`.
+I primi due stanno in `scripts\fonts` e WPF li carica da lì, senza installarli; sono ridotti (harfbuzz, `subset-font`) a
+ASCII, Latin-1, Latin Extended-A, punteggiatura, frecce, kana e ai caratteri presenti negli script, e quelli che mancano
+arrivano da Yu Gothic UI. Nunito è un font variabile: i tre pesi sono istanze fisse, con il nome di famiglia corretto
+in "Nunito" (WPF non sceglie i pesi di un font variabile).
 La finestra legge tutto dallo script, senza eseguirlo, quindi un comando nuovo è solo un nuovo `.ps1` in `scripts/`.
 Dal commento di aiuto iniziale:
-- `.FUNCTIONALITY` il titolo breve (senza, il nome del file); `.COMPONENT` il gruppo (senza, "Altro"), con icona in
+- `.FUNCTIONALITY` il titolo breve (senza, il nome del file); `.COMPONENT` il gruppo (senza, "Altro"), con posizione
+  in `$groupOrder` (App, Telefono, Firebase, Release, Proxy; i gruppi nuovi dopo, "Altro" in fondo), icona in
   `$groupIcons` e colore in `$groupThemes` di `gui.ps1` (Telefono blu, App verde, Firebase giallo, Proxy arancione,
   Release rosa sakura), ripreso nell'elenco, nella scheda, nel pulsante Esegui e nelle esecuzioni;
 - `.SYNOPSIS` una frase su cosa fa, sotto il titolo nella scheda (l'elenco a sinistra mostra solo i titoli);

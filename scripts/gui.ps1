@@ -101,7 +101,20 @@ $scriptsDir = $PSScriptRoot
 $root = Split-Path -Parent $scriptsDir
 # Gli script di avvio (parametri + chiamata) si scrivono qui e si cancellano a fine esecuzione.
 $tempDir = Join-Path ([IO.Path]::GetTempPath()) 'animewatch-scripts'
+# Font della finestra (l'output resta in Consolas), scelto con il pulsante in basso a sinistra e ricordato per utente.
+# M PLUS Rounded 1c e Nunito stanno in scripts\fonts (licenza OFL, ridotti ai caratteri che servono: i caratteri
+# mancanti arrivano da Yu Gothic UI), quindi non vanno installati; Bahnschrift e Yu Gothic UI sono di Windows.
+$settingsFile = Join-Path $env:APPDATA 'animewatch-scripts\gui.json'
+$fontBase = [Uri]::new((Join-Path $scriptsDir 'fonts') + '\')
+$uiFonts = [ordered]@{
+    'M PLUS Rounded 1c' = [Windows.Media.FontFamily]::new($fontBase, './#Rounded Mplus 1c, Yu Gothic UI, Segoe UI')
+    'Nunito' = [Windows.Media.FontFamily]::new($fontBase, './#Nunito, Yu Gothic UI, Segoe UI')
+    'Bahnschrift' = [Windows.Media.FontFamily]::new('Bahnschrift, Yu Gothic UI, Segoe UI')
+    'Yu Gothic UI' = [Windows.Media.FontFamily]::new('Yu Gothic UI, Segoe UI')
+}
 $otherGroup = 'Altro'
+# Ordine dei gruppi nell'elenco; quelli che non ci sono vanno dopo, in ordine alfabetico, e "Altro" in fondo.
+$groupOrder = 'App', 'Telefono', 'Firebase', 'Release', 'Proxy'
 $helpKeywords = 'SYNOPSIS|DESCRIPTION|PARAMETER|EXAMPLE|INPUTS|OUTPUTS|NOTES|LINK|COMPONENT|ROLE|FUNCTIONALITY'
 # Icone dei gruppi (Segoe MDL2 Assets); un gruppo nuovo prende quella generica.
 $groupIcons = @{
@@ -244,7 +257,11 @@ function Get-Scripts {
             }
         }
     }
-    return @($found | Sort-Object @{ Expression = { $_.Group -eq $otherGroup } }, Group, Title)
+    $rank = {
+        $i = [array]::IndexOf($groupOrder, $_.Group)
+        if ($i -ge 0) { $i } elseif ($_.Group -eq $otherGroup) { [int]::MaxValue } else { $groupOrder.Count }
+    }
+    return @($found | Sort-Object @{ Expression = $rank }, Group, Title)
 }
 
 # ---- Comando ---------------------------------------------------------------------------------------------------------
@@ -942,6 +959,44 @@ function Import-Scripts {
     Update-List $keep
 }
 
+function Get-SavedFont {
+    try {
+        $name = (Get-Content -LiteralPath $settingsFile -Raw -Encoding UTF8 | ConvertFrom-Json).font
+        if ($name -and $uiFonts.Contains($name)) { return $name }
+    } catch { }
+    return @($uiFonts.Keys)[0]
+}
+
+function Set-UiFont([string]$name, [bool]$save = $true) {
+    $script:uiFont = $name
+    $window.Resources['UiFont'] = $uiFonts[$name]
+    $fontButton.ToolTip = "Font della finestra: $name"
+    if (-not $save) { return }
+    try {
+        [void](New-Item -ItemType Directory -Force -Path (Split-Path -Parent $settingsFile))
+        @{ font = $name } | ConvertTo-Json | Set-Content -LiteralPath $settingsFile -Encoding UTF8
+    } catch { }   # senza un posto dove salvarla, la scelta vale fino alla chiusura
+}
+
+# Una riga per font, scritta nel font stesso: si vede com'è prima di sceglierlo.
+function Show-FontPicker {
+    $fontPanel.Children.Clear()
+    foreach ($name in $uiFonts.Keys) {
+        $item = New-Object Windows.Controls.Primitives.ToggleButton -Property @{
+            Style = $window.FindResource('Segment'); Tag = $name; IsChecked = ($name -eq $script:uiFont)
+            FontFamily = $uiFonts[$name]; FontSize = 14; HorizontalContentAlignment = 'Left'
+            HorizontalAlignment = 'Stretch'; MinWidth = 230; Margin = [Windows.Thickness]::new(0, 0, 0, 6)
+            Content = "$name · アニメ"
+        }
+        $item.Add_Click({
+            param($src)
+            Invoke-Safe { Set-UiFont $src.Tag; $fontPopup.IsOpen = $false }
+        })
+        [void]$fontPanel.Children.Add($item)
+    }
+    $fontPopup.IsOpen = $true
+}
+
 function Find-ScrollViewer($element) {
     if ($element -is [Windows.Controls.ScrollViewer]) { return $element }
     for ($i = 0; $i -lt [Windows.Media.VisualTreeHelper]::GetChildrenCount($element); $i++) {
@@ -956,7 +1011,7 @@ function Find-ScrollViewer($element) {
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="AnimeWatch · script" Width="1180" Height="900" MinWidth="900" MinHeight="640"
         WindowStartupLocation="CenterScreen" Background="#141A33"
-        FontFamily="Yu Gothic UI, Segoe UI" FontSize="13" Foreground="#FFF6E5" UseLayoutRounding="True"
+        FontFamily="{DynamicResource UiFont}" FontSize="13" Foreground="#FFF6E5" UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display">
   <Window.Resources>
     <!-- Stile anime: colori piatti (cel), contorni "a china" e ombre nette spostate, niente bagliori -->
@@ -970,9 +1025,13 @@ function Find-ScrollViewer($element) {
     <SolidColorBrush x:Key="Accent" Color="#F2994A"/>
     <SolidColorBrush x:Key="AccentSoft" Color="#3B2E3A"/>
     <FontFamily x:Key="Icons">Segoe MDL2 Assets</FontFamily>
+    <!-- Sostituito all'avvio con il font scelto ($uiFonts) -->
+    <FontFamily x:Key="UiFont">Yu Gothic UI, Segoe UI</FontFamily>
     <Geometry x:Key="Cloud">M 0,40 C 0,28 12,22 22,26 C 26,10 50,6 60,20 C 68,8 92,10 94,28 C 106,26 116,34 114,44 L 0,44 Z</Geometry>
 
     <Style TargetType="ToolTip">
+      <!-- I tooltip sono finestre a parte: il font della finestra non arriva da solo -->
+      <Setter Property="FontFamily" Value="{DynamicResource UiFont}"/>
       <Setter Property="Background" Value="{StaticResource Raised}"/>
       <Setter Property="Foreground" Value="{StaticResource Text}"/>
       <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
@@ -1309,7 +1368,22 @@ function Find-ScrollViewer($element) {
           <TextBlock x:Name="FilterHint" Text="Cerca uno script…" Foreground="{StaticResource Faint}" Margin="33,0,0,0"
                      VerticalAlignment="Center" IsHitTestVisible="False"/>
         </Grid>
-        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,14,0,0">
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,14,0,0" LastChildFill="False">
+          <Button x:Name="FontButton" DockPanel.Dock="Right" Margin="0" Padding="11,7" ToolTip="Font della finestra">
+            <TextBlock Text="&#xE8D2;" FontFamily="{StaticResource Icons}" Foreground="#EE8FA6" FontSize="14"/>
+          </Button>
+          <Popup x:Name="FontPopup" PlacementTarget="{Binding ElementName=FontButton}" Placement="Top"
+                 VerticalOffset="-8" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+            <Grid Margin="0,0,6,6">
+              <Border Style="{StaticResource CardShadow}"/>
+              <Border Style="{StaticResource Card}" Padding="14,12,14,8" Background="{StaticResource Raised}">
+                <StackPanel>
+                  <TextBlock Text="フォント  FONT" Style="{StaticResource Caption}" Margin="2,0,0,10"/>
+                  <StackPanel x:Name="FontPanel"/>
+                </StackPanel>
+              </Border>
+            </Grid>
+          </Popup>
           <Button x:Name="FolderButton" ToolTip="Apre la cartella scripts in Esplora file">
             <StackPanel Orientation="Horizontal">
               <TextBlock Text="&#xE838;" FontFamily="{StaticResource Icons}" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#F2C94C"/>
@@ -1322,7 +1396,7 @@ function Find-ScrollViewer($element) {
               <TextBlock Text="Ricarica"/>
             </StackPanel>
           </Button>
-        </StackPanel>
+        </DockPanel>
         <Grid>
           <Border Style="{StaticResource CardShadow}"/>
           <Border Style="{StaticResource Card}" Padding="8">
@@ -1518,7 +1592,8 @@ try {
         'RunButton', 'ExternalButton', 'CopyButton', 'CopyText', 'EditButton', 'DetailScroll', 'ParamPanel',
         'DescriptionSection', 'DescriptionText', 'DescCaption', 'StepsSection', 'StepsPanel', 'StepsCaption',
         'OptionsPane', 'OptionsCaption', 'OutputTitle', 'OutputStatus', 'StopButton', 'CopyOutputButton',
-        'ClearButton', 'RunTabs', 'InputBox', 'InputHint', 'SendButton', 'OutputList', 'EmptyOutput') {
+        'ClearButton', 'RunTabs', 'InputBox', 'InputHint', 'SendButton', 'OutputList', 'EmptyOutput',
+        'FontButton', 'FontPopup', 'FontPanel') {
         $control = $window.FindName($n)
         if (-not $control) { throw "Controllo $n non trovato nel layout." }
         Set-Variable -Name ($n.Substring(0, 1).ToLower() + $n.Substring(1)) -Value $control -Scope Script
@@ -1576,6 +1651,15 @@ try {
     $editButton.Add_Click({ Invoke-Safe { Open-Script } })
     $folderButton.Add_Click({ Invoke-Safe { Start-Process explorer.exe -ArgumentList ('"{0}"' -f $scriptsDir) } })
     $reloadButton.Add_Click({ Invoke-Safe { Import-Scripts } })
+    # Un clic sul pulsante a pannello aperto lo chiude (StaysOpen="False") prima del Click: senza questo controllo il
+    # Click lo riaprirebbe subito.
+    $script:fontPopupClosed = [DateTime]::MinValue
+    $fontPopup.Add_Closed({ $script:fontPopupClosed = [DateTime]::Now })
+    $fontButton.Add_Click({
+        Invoke-Safe {
+            if (([DateTime]::Now - $script:fontPopupClosed).TotalMilliseconds -gt 300) { Show-FontPicker }
+        }
+    })
     $stopButton.Add_Click({ Invoke-Safe { Stop-Run $script:selectedRun } })
     $copyOutputButton.Add_Click({ Invoke-Safe { Copy-Output $false } })
     $clearButton.Add_Click({ Invoke-Safe { Clear-Runs } })
@@ -1614,6 +1698,7 @@ try {
     })
     $timer.Start()
 
+    Set-UiFont (Get-SavedFont) $false
     Import-Scripts
     Update-OutputHeader
     [void]$window.ShowDialog()

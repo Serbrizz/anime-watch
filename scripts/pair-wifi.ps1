@@ -28,6 +28,8 @@
     Collega il telefono via Wi-Fi
 .COMPONENT
     Telefono
+.ROLE
+    Principale
 .EXAMPLE
     .\scripts\pair-wifi.ps1
 #>

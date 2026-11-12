@@ -26,6 +26,8 @@
     Logcat dell'app
 .COMPONENT
     Telefono
+.ROLE
+    Principale
 .EXAMPLE
     .\scripts\logcat.ps1
 #>

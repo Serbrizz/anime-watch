@@ -10,7 +10,11 @@
     - gruppo: .COMPONENT (senza, finisce in "Altro");
     - opzioni: i parametri di param(). [switch] diventa un interruttore, [ValidateSet(...)] una fila di pulsanti, il
       resto un campo di testo. Di .PARAMETER la prima riga è il nome mostrato, il resto la spiegazione (con una riga
-      sola, il nome è quello del parametro); [Parameter(DontShow)] nasconde un parametro.
+      sola, il nome è quello del parametro); [Parameter(DontShow)] nasconde un parametro;
+    - modalità semplice: .ROLE Principale. La finestra si apre in modalità semplice, che mostra solo questi script,
+      solo le istruzioni (la spiegazione se non ce ne sono), solo le opzioni a scelta e quelle obbligatorie (le altre
+      restano al valore predefinito) e solo il pulsante Esegui. Si spegne dalle Impostazioni (in basso a sinistra,
+      con il font); la scelta si ricorda.
 
     Gli script girano dentro la finestra: un powershell nascosto con input e output redirezionati, l'output nel
     pannello in basso e un campo per rispondere quando lo script chiede qualcosa (Read-Host). "In una console" li
@@ -101,18 +105,21 @@ $scriptsDir = $PSScriptRoot
 $root = Split-Path -Parent $scriptsDir
 # Gli script di avvio (parametri + chiamata) si scrivono qui e si cancellano a fine esecuzione.
 $tempDir = Join-Path ([IO.Path]::GetTempPath()) 'animewatch-scripts'
-# Font della finestra (l'output resta in Consolas), scelto con il pulsante in basso a sinistra e ricordato per utente.
+# Font della finestra (l'output resta in Consolas), scelto dalle Impostazioni (in basso a sinistra) e ricordato per utente.
 # M PLUS Rounded 1c e Nunito stanno in scripts\fonts (licenza OFL, ridotti ai caratteri che servono: i caratteri
 # mancanti arrivano da Yu Gothic UI), quindi non vanno installati; Bahnschrift e Yu Gothic UI sono di Windows.
 $settingsFile = Join-Path $env:APPDATA 'animewatch-scripts\gui.json'
 $fontBase = [Uri]::new((Join-Path $scriptsDir 'fonts') + '\')
+# Il primo è il predefinito.
 $uiFonts = [ordered]@{
-    'M PLUS Rounded 1c' = [Windows.Media.FontFamily]::new($fontBase, './#Rounded Mplus 1c, Yu Gothic UI, Segoe UI')
     'Nunito' = [Windows.Media.FontFamily]::new($fontBase, './#Nunito, Yu Gothic UI, Segoe UI')
+    'M PLUS Rounded 1c' = [Windows.Media.FontFamily]::new($fontBase, './#Rounded Mplus 1c, Yu Gothic UI, Segoe UI')
     'Bahnschrift' = [Windows.Media.FontFamily]::new('Bahnschrift, Yu Gothic UI, Segoe UI')
     'Yu Gothic UI' = [Windows.Media.FontFamily]::new('Yu Gothic UI, Segoe UI')
 }
 $otherGroup = 'Altro'
+# Gli script con questo .ROLE sono gli unici della modalità semplice.
+$mainRole = 'Principale'
 # Ordine dei gruppi nell'elenco; quelli che non ci sono vanno dopo, in ordine alfabetico, e "Altro" in fondo.
 $groupOrder = 'App', 'Telefono', 'Firebase', 'Release', 'Proxy'
 $helpKeywords = 'SYNOPSIS|DESCRIPTION|PARAMETER|EXAMPLE|INPUTS|OUTPUTS|NOTES|LINK|COMPONENT|ROLE|FUNCTIONALITY'
@@ -131,6 +138,7 @@ $script:commandText = ''
 $script:values = @{}
 $script:runs = New-Object System.Collections.Generic.List[object]
 $script:selectedRun = $null
+$script:simple = $true
 
 # ---- Lettura degli script ------------------------------------------------------------------------------------------
 
@@ -144,7 +152,7 @@ function Format-Block([string[]]$lines) {
 }
 
 function Read-Help([string]$text) {
-    $help = @{ Title = ''; Synopsis = ''; Description = ''; Steps = ''; Component = ''; Params = @{} }
+    $help = @{ Title = ''; Synopsis = ''; Description = ''; Steps = ''; Component = ''; Role = ''; Params = @{} }
     $m = [regex]::Match($text, '(?s)<#(.*?)#>')
     if (-not $m.Success) { return $help }
     $sections = New-Object System.Collections.Generic.List[object]
@@ -164,6 +172,7 @@ function Read-Help([string]$text) {
             'DESCRIPTION' { $help.Description = $body }
             'NOTES' { $help.Steps = $body }
             'COMPONENT' { $help.Component = ($body -split "`n")[0].Trim() }
+            'ROLE' { $help.Role = ($body -split "`n")[0].Trim() }
             'FUNCTIONALITY' { $help.Title = ($body -split "`n")[0].Trim() }
             'PARAMETER' { $help.Params[$s.Arg.ToLower()] = $body }
         }
@@ -245,6 +254,7 @@ function Get-Scripts {
                 Title = $title
                 Path = $file.FullName
                 Group = $group
+                Main = ($help.Role -eq $mainRole)
                 Synopsis = $help.Synopsis
                 Description = $help.Description
                 Steps = $help.Steps
@@ -252,7 +262,7 @@ function Get-Scripts {
             }
         } catch {
             [pscustomobject]@{
-                Name = $file.BaseName; Title = $file.BaseName; Path = $file.FullName; Group = $otherGroup
+                Name = $file.BaseName; Title = $file.BaseName; Path = $file.FullName; Group = $otherGroup; Main = $false
                 Synopsis = "Non leggibile: $($_.Exception.Message)"; Description = ''; Steps = ''; Params = @()
             }
         }
@@ -281,10 +291,17 @@ function Get-Values($s) {
     return $script:values[$s.Path]
 }
 
+# In modalità semplice solo le opzioni a scelta e quelle obbligatorie; le altre non si mostrano e non si passano,
+# anche se in modalità avanzata hanno un valore, così lo script parte con i suoi predefiniti.
+function Get-ShownParams($s) {
+    if (-not $script:simple) { return $s.Params }
+    return @($s.Params | Where-Object { $_.Kind -eq 'choice' -or $_.Mandatory })
+}
+
 # Gli argomenti da passare: solo quelli scelti, il resto lo decide il valore predefinito dello script.
 function Get-Arguments($s) {
     $vals = Get-Values $s
-    foreach ($p in $s.Params) {
+    foreach ($p in (Get-ShownParams $s)) {
         $v = $vals[$p.Name]
         if ($p.Kind -eq 'switch') {
             if ($v) { [pscustomobject]@{ Name = $p.Name; Value = $true } }
@@ -319,7 +336,7 @@ function Format-Command($s, $arguments) {
 
 function Test-Mandatory($s) {
     $vals = Get-Values $s
-    foreach ($p in $s.Params) {
+    foreach ($p in (Get-ShownParams $s)) {
         if ($p.Mandatory -and -not "$($vals[$p.Name])".Trim()) {
             [void][Windows.MessageBox]::Show($window, "Scegli prima un valore per ""$($p.Label)"".", $s.Title, 'OK', 'Information')
             return $false
@@ -725,6 +742,7 @@ function Update-List([string]$keepPath = $(if ($script:current) { $script:curren
     $group = $null
     $selected = $null
     foreach ($s in $script:scripts) {
+        if ($script:simple -and -not $s.Main) { continue }
         $haystack = "$($s.Title) $($s.Name) $($s.Synopsis) $($s.Group)"
         if ($filter -and $haystack.IndexOf($filter, [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
         $theme = Get-Theme $s.Group
@@ -899,15 +917,20 @@ function Show-Script($s) {
     $fileText.Text = "scripts\$($s.Name).ps1"
     $synopsisText.Text = Join-Lines $s.Synopsis
 
-    $descriptionText.Text = Join-Lines $s.Description
-    $descriptionSection.Visibility = $(if ($s.Description) { 'Visible' } else { 'Collapsed' })
     $n = 0
     foreach ($step in (Get-Steps $s.Steps)) { [void]$stepsPanel.Children.Add((New-Step (++$n) $step $theme)) }
     $stepsSection.Visibility = $(if ($n) { 'Visible' } else { 'Collapsed' })
-    $optionsPane.Visibility = $(if ($s.Params.Count) { 'Visible' } else { 'Collapsed' })
+    # In modalità semplice bastano le istruzioni: la spiegazione resta solo se mancano.
+    $descriptionText.Text = Join-Lines $s.Description
+    $showDescription = $s.Description -and -not ($script:simple -and $n)
+    $descriptionSection.Visibility = $(if ($showDescription) { 'Visible' } else { 'Collapsed' })
+    $shown = @(Get-ShownParams $s)
+    $optionsPane.Visibility = $(if ($shown.Count) { 'Visible' } else { 'Collapsed' })
+    $extra = $(if ($script:simple) { 'Collapsed' } else { 'Visible' })
+    foreach ($b in $externalButton, $copyButton, $editButton) { $b.Visibility = $extra }
 
     $vals = Get-Values $s
-    foreach ($p in $s.Params) {
+    foreach ($p in $shown) {
         $block = New-Object Windows.Controls.StackPanel -Property @{ Margin = [Windows.Thickness]::new(0, 0, 0, 16) }
         $label = $p.Label
         if ($p.Mandatory) { $label += '  ·  obbligatorio' }
@@ -959,42 +982,67 @@ function Import-Scripts {
     Update-List $keep
 }
 
-function Get-SavedFont {
+# Un valore di gui.json, '' se manca (file assente, illeggibile o di una versione che non lo aveva).
+function Get-Setting([string]$name) {
     try {
-        $name = (Get-Content -LiteralPath $settingsFile -Raw -Encoding UTF8 | ConvertFrom-Json).font
-        if ($name -and $uiFonts.Contains($name)) { return $name }
+        $prop = (Get-Content -LiteralPath $settingsFile -Raw -Encoding UTF8 | ConvertFrom-Json).PSObject.Properties[$name]
+        if ($prop) { return "$($prop.Value)" }
     } catch { }
+    return ''
+}
+
+function Save-Settings {
+    try {
+        [void](New-Item -ItemType Directory -Force -Path (Split-Path -Parent $settingsFile))
+        @{ font = $script:uiFont; mode = $(if ($script:simple) { 'simple' } else { 'advanced' }) } |
+            ConvertTo-Json | Set-Content -LiteralPath $settingsFile -Encoding UTF8
+    } catch { }   # senza un posto dove salvarle, le scelte valgono fino alla chiusura
+}
+
+function Get-SavedFont {
+    $name = Get-Setting 'font'
+    if ($name -and $uiFonts.Contains($name)) { return $name }
     return @($uiFonts.Keys)[0]
 }
 
 function Set-UiFont([string]$name, [bool]$save = $true) {
     $script:uiFont = $name
     $window.Resources['UiFont'] = $uiFonts[$name]
-    $fontButton.ToolTip = "Font della finestra: $name"
-    if (-not $save) { return }
-    try {
-        [void](New-Item -ItemType Directory -Force -Path (Split-Path -Parent $settingsFile))
-        @{ font = $name } | ConvertTo-Json | Set-Content -LiteralPath $settingsFile -Encoding UTF8
-    } catch { }   # senza un posto dove salvarla, la scelta vale fino alla chiusura
+    foreach ($item in $fontPanel.Children) { $item.IsChecked = ($item.Tag -eq $name) }
+    if ($save) { Save-Settings }
 }
 
-# Una riga per font, scritta nel font stesso: si vede com'è prima di sceglierlo.
-function Show-FontPicker {
-    $fontPanel.Children.Clear()
+# Semplice: solo gli script principali (la ricerca cerca fra questi), senza Cartella e Ricarica (F5 resta). La scheda
+# si ridisegna anche se resta lo stesso script: cambiano opzioni e pulsanti.
+function Set-Mode([bool]$simple, [bool]$save = $true) {
+    $script:simple = $simple
+    $simpleSwitch.IsChecked = $simple
+    $full = $(if ($simple) { 'Collapsed' } else { 'Visible' })
+    foreach ($c in $folderButton, $reloadButton) { $c.Visibility = $full }
+    $subtitle.Text = $(if ($simple) { "Scegli un'azione e premi Esegui." } else { "Scegli un'azione, regola le opzioni e premi Esegui." })
+    if ($save) { Save-Settings }
+    $keep = ''
+    if ($script:current) { $keep = $script:current.Path }
+    $script:current = $null
+    Update-List $keep
+}
+
+# Una riga per font, scritta nel font stesso: si vede com'è prima di sceglierlo. Il pannello resta aperto dopo la
+# scelta, così si confrontano i font; si chiude toccando fuori.
+function New-FontChoices {
     foreach ($name in $uiFonts.Keys) {
         $item = New-Object Windows.Controls.Primitives.ToggleButton -Property @{
-            Style = $window.FindResource('Segment'); Tag = $name; IsChecked = ($name -eq $script:uiFont)
+            Style = $window.FindResource('Segment'); Tag = $name   # la spunta la mette Set-UiFont
             FontFamily = $uiFonts[$name]; FontSize = 14; HorizontalContentAlignment = 'Left'
             HorizontalAlignment = 'Stretch'; MinWidth = 230; Margin = [Windows.Thickness]::new(0, 0, 0, 6)
             Content = "$name · アニメ"
         }
         $item.Add_Click({
             param($src)
-            Invoke-Safe { Set-UiFont $src.Tag; $fontPopup.IsOpen = $false }
+            Invoke-Safe { Set-UiFont $src.Tag }
         })
         [void]$fontPanel.Children.Add($item)
     }
-    $fontPopup.IsOpen = $true
 }
 
 function Find-ScrollViewer($element) {
@@ -1358,8 +1406,7 @@ function Find-ScrollViewer($element) {
         <StackPanel DockPanel.Dock="Top" Margin="4,0,0,16">
           <TextBlock Text="AnimeWatch" FontSize="30" FontWeight="Bold" Foreground="#FFF6E5"/>
           <TextBlock Text="アニメウォッチ ・ スクリプト" FontSize="12" Foreground="#F2994A" Margin="2,0,0,2"/>
-          <TextBlock Text="Scegli un'azione, regola le opzioni e premi Esegui." Foreground="{StaticResource Muted}"
-                     Margin="2,4,0,0" TextWrapping="Wrap"/>
+          <TextBlock x:Name="Subtitle" Foreground="{StaticResource Muted}" Margin="2,4,0,0" TextWrapping="Wrap"/>
         </StackPanel>
         <Grid DockPanel.Dock="Top" Margin="0,0,0,12">
           <TextBox x:Name="FilterBox" Padding="30,7,8,7" ToolTip="Ctrl+F"/>
@@ -1369,15 +1416,19 @@ function Find-ScrollViewer($element) {
                      VerticalAlignment="Center" IsHitTestVisible="False"/>
         </Grid>
         <DockPanel DockPanel.Dock="Bottom" Margin="0,14,0,0" LastChildFill="False">
-          <Button x:Name="FontButton" DockPanel.Dock="Right" Margin="0" Padding="11,7" ToolTip="Font della finestra">
-            <TextBlock Text="&#xE8D2;" FontFamily="{StaticResource Icons}" Foreground="#EE8FA6" FontSize="14"/>
+          <Button x:Name="SettingsButton" DockPanel.Dock="Right" Margin="0" Padding="11,7" ToolTip="Impostazioni">
+            <TextBlock Text="&#xE713;" FontFamily="{StaticResource Icons}" Foreground="#EE8FA6" FontSize="14"/>
           </Button>
-          <Popup x:Name="FontPopup" PlacementTarget="{Binding ElementName=FontButton}" Placement="Top"
+          <Popup x:Name="SettingsPopup" PlacementTarget="{Binding ElementName=SettingsButton}" Placement="Top"
                  VerticalOffset="-8" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
             <Grid Margin="0,0,6,6">
               <Border Style="{StaticResource CardShadow}"/>
               <Border Style="{StaticResource Card}" Padding="14,12,14,8" Background="{StaticResource Raised}">
-                <StackPanel>
+                <StackPanel Width="260">
+                  <TextBlock Text="モード  MODALITÀ" Style="{StaticResource Caption}" Margin="2,0,0,10"/>
+                  <CheckBox x:Name="SimpleSwitch" Content="Modalità semplice" Margin="2,0,0,0"/>
+                  <TextBlock Text="Solo gli script principali e le opzioni essenziali. Spenta: tutti gli script, con spiegazioni e opzioni."
+                             TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="48,4,0,16"/>
                   <TextBlock Text="フォント  FONT" Style="{StaticResource Caption}" Margin="2,0,0,10"/>
                   <StackPanel x:Name="FontPanel"/>
                 </StackPanel>
@@ -1593,7 +1644,7 @@ try {
         'DescriptionSection', 'DescriptionText', 'DescCaption', 'StepsSection', 'StepsPanel', 'StepsCaption',
         'OptionsPane', 'OptionsCaption', 'OutputTitle', 'OutputStatus', 'StopButton', 'CopyOutputButton',
         'ClearButton', 'RunTabs', 'InputBox', 'InputHint', 'SendButton', 'OutputList', 'EmptyOutput',
-        'FontButton', 'FontPopup', 'FontPanel') {
+        'SettingsButton', 'SettingsPopup', 'FontPanel', 'SimpleSwitch', 'Subtitle') {
         $control = $window.FindName($n)
         if (-not $control) { throw "Controllo $n non trovato nel layout." }
         Set-Variable -Name ($n.Substring(0, 1).ToLower() + $n.Substring(1)) -Value $control -Scope Script
@@ -1653,13 +1704,14 @@ try {
     $reloadButton.Add_Click({ Invoke-Safe { Import-Scripts } })
     # Un clic sul pulsante a pannello aperto lo chiude (StaysOpen="False") prima del Click: senza questo controllo il
     # Click lo riaprirebbe subito.
-    $script:fontPopupClosed = [DateTime]::MinValue
-    $fontPopup.Add_Closed({ $script:fontPopupClosed = [DateTime]::Now })
-    $fontButton.Add_Click({
+    $script:settingsClosed = [DateTime]::MinValue
+    $settingsPopup.Add_Closed({ $script:settingsClosed = [DateTime]::Now })
+    $settingsButton.Add_Click({
         Invoke-Safe {
-            if (([DateTime]::Now - $script:fontPopupClosed).TotalMilliseconds -gt 300) { Show-FontPicker }
+            if (([DateTime]::Now - $script:settingsClosed).TotalMilliseconds -gt 300) { $settingsPopup.IsOpen = $true }
         }
     })
+    $simpleSwitch.Add_Click({ Invoke-Safe { Set-Mode ([bool]$simpleSwitch.IsChecked) } })
     $stopButton.Add_Click({ Invoke-Safe { Stop-Run $script:selectedRun } })
     $copyOutputButton.Add_Click({ Invoke-Safe { Copy-Output $false } })
     $clearButton.Add_Click({ Invoke-Safe { Clear-Runs } })
@@ -1698,8 +1750,10 @@ try {
     })
     $timer.Start()
 
+    New-FontChoices
     Set-UiFont (Get-SavedFont) $false
-    Import-Scripts
+    $script:scripts = Get-Scripts
+    Set-Mode ((Get-Setting 'mode') -ne 'advanced') $false
     Update-OutputHeader
     [void]$window.ShowDialog()
     $timer.Stop()

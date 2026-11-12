@@ -21,6 +21,8 @@
     Pubblica le regole Firestore
 .COMPONENT
     Firebase
+.ROLE
+    Principale
 .EXAMPLE
     .\scripts\deploy-rules.ps1
 #>

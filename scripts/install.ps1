@@ -36,6 +36,8 @@
     Installa sul telefono
 .COMPONENT
     Telefono
+.ROLE
+    Principale
 .EXAMPLE
     .\scripts\install.ps1
 .EXAMPLE

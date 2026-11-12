@@ -441,8 +441,13 @@ giapponese (cielo di notte, colori piatti con contorni scuri e ombre nette, nien
 con `Add-Type`), l'output colorato nel pannello in basso, una scheda per esecuzione con lo stato, un campo per
 rispondere quando lo script fa una domanda e "Ferma", che chiude lo script e i suoi processi tranne il server adb (terrebbe
 giù il Wi-Fi del telefono) e il daemon di Gradle. "In una console" lo apre invece in una finestra PowerShell separata.
-Il font della finestra si sceglie col pulsante in basso a sinistra (M PLUS Rounded 1c, il predefinito, Nunito,
-Bahnschrift o Yu Gothic UI; l'output resta in Consolas) e si ricorda per utente in `%APPDATA%\animewatch-scripts\gui.json`.
+Il pulsante Impostazioni (ingranaggio, in basso a sinistra) apre un pannello con l'interruttore "Modalità semplice" e
+il font. La finestra si apre in modalità **semplice**: solo gli script principali (Wi-Fi, installazione, logcat,
+regole Firestore, release), della scheda solo "Come si usa" e il pulsante Esegui, delle opzioni solo quelle a scelta e
+quelle obbligatorie (le altre non si passano: valgono i predefiniti dello script), la ricerca solo fra quegli script,
+niente Cartella e Ricarica; il pannello dell'output resta uguale. Spenta, si vede tutto.
+Il font della finestra è Nunito (predefinito), M PLUS Rounded 1c, Bahnschrift o Yu Gothic UI; l'output resta in
+Consolas. Font e modalità si ricordano per utente in `%APPDATA%\animewatch-scripts\gui.json`.
 I primi due stanno in `scripts\fonts` e WPF li carica da lì, senza installarli; sono ridotti (harfbuzz, `subset-font`) a
 ASCII, Latin-1, Latin Extended-A, punteggiatura, frecce, kana e ai caratteri presenti negli script, e quelli che mancano
 arrivano da Yu Gothic UI. Nunito è un font variabile: i tre pesi sono istanze fisse, con il nome di famiglia corretto
@@ -453,6 +458,7 @@ Dal commento di aiuto iniziale:
   in `$groupOrder` (App, Telefono, Firebase, Release, Proxy; i gruppi nuovi dopo, "Altro" in fondo), icona in
   `$groupIcons` e colore in `$groupThemes` di `gui.ps1` (Telefono blu, App verde, Firebase giallo, Proxy arancione,
   Release rosa sakura), ripreso nell'elenco, nella scheda, nel pulsante Esegui e nelle esecuzioni;
+- `.ROLE Principale` mette lo script nella modalità semplice;
 - `.SYNOPSIS` una frase su cosa fa, sotto il titolo nella scheda (l'elenco a sinistra mostra solo i titoli);
   `.DESCRIPTION` ("Cosa fa") la spiegazione completa: cosa fa passo per passo, cosa succede se qualcosa va storto,
   "Serve: ..." con i requisiti; paragrafi separati da una riga vuota, elenchi con `- ` o `1. `;

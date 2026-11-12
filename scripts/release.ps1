@@ -49,6 +49,9 @@
 .COMPONENT
     Release
 
+.ROLE
+    Principale
+
 .EXAMPLE
     .\scripts\release.cmd minor
 

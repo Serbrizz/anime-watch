@@ -1,18 +1,45 @@
 ﻿<#
 .SYNOPSIS
-    Aggiorna il codice (git fetch + pull), ricompila l'APK e lo installa sul telefono collegato con adb.
+    Aggiorna il codice da GitHub, compila l'APK e lo installa sul telefono collegato.
 .DESCRIPTION
-    Si ferma al primo problema, dice in quale passo e perché, e non esegue i passi successivi.
-    Il pull è solo fast-forward: se il branch locale e quello remoto hanno commit diversi non fa merge, si ferma.
+    Fa in sequenza:
+    - controlla che git, adb e il telefono siano pronti: telefono collegato e autorizzato, uno solo oppure quello
+      scelto in "Telefono";
+    - scarica le modifiche del branch su cui sei (git fetch e git pull): se hai commit locali non pubblicati e su
+      GitHub ce ne sono di nuovi si ferma, invece di unirli;
+    - compila l'APK di debug, o di release se accendi l'opzione;
+    - lo installa sopra la versione già presente sul telefono: i dati dell'app restano e non serve rifare l'accesso.
+
+    Si ferma al primo problema, dice in quale passo e perché, e non esegue i passi successivi. Il pulsante Ferma lo interrompe in qualsiasi
+    momento.
+
+    Serve: il telefono con il debug USB attivo (Impostazioni > Opzioni sviluppatore > Debug USB), collegato con il cavo
+    o via Wi-Fi.
+.NOTES
+    1. Collega il telefono al PC con il cavo USB, oppure via Wi-Fi con "Collega il telefono via Wi-Fi".
+    2. Sblocca il telefono. La prima volta che lo colleghi a questo PC compare "Consentire il debug USB?": tocca
+       Consenti (meglio con "Consenti sempre da questo computer").
+    3. Premi Esegui. La compilazione richiede da uno a qualche minuto.
+    4. Quando l'output scrive in verde "Fatto: AnimeWatch ... installata", apri l'app sul telefono.
+    5. Se invece si ferma con INTERROTTO, leggi il motivo: dice cosa sistemare. Poi premi di nuovo Esegui.
 .PARAMETER Release
-    Compila la variante release (serve il vero google-services.json).
-    Senza, compila la debug: ha la stessa firma, quindi si installa anche sopra una versione pubblicata.
+    APK di release
+    Acceso compila la variante release, quella che ricevono gli utenti: richiede il vero google-services.json.
+    Spento compila la debug, che ha la stessa firma e quindi si installa anche sopra una versione pubblicata: di
+    solito si lascia spento.
 .PARAMETER Serial
-    Il dispositivo su cui installare, come compare in `adb devices`. Serve solo se ne sono collegati più di uno.
+    Telefono
+    Serve solo se sono collegati più dispositivi (per esempio lo stesso telefono con il cavo e via Wi-Fi, o un
+    emulatore): scrivi il seriale di quello giusto, che lo script elenca quando ne trova più di uno. Vuoto: l'unico
+    collegato, o quello della variabile ANDROID_SERIAL se è impostata.
+.FUNCTIONALITY
+    Installa sul telefono
+.COMPONENT
+    Telefono
 .EXAMPLE
-    .\install.ps1
+    .\scripts\install.ps1
 .EXAMPLE
-    .\install.ps1 -Release -Serial PZMNS4NBH6UKRGTO
+    .\scripts\install.ps1 -Release -Serial PZMNS4NBH6UKRGTO
 #>
 param(
     [switch]$Release,
@@ -77,14 +104,15 @@ function Assert-DeviceReady($device) {
     }
 }
 
-Push-Location $PSScriptRoot
+$root = Split-Path -Parent $PSScriptRoot
+Push-Location $root
 try {
     # ---- 1. Controlli prima di toccare qualcosa: meglio fermarsi subito che dopo minuti di build ----
     Step 'controlli preliminari'
 
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Fail 'git non è installato o non è nel PATH.' }
     $null = git rev-parse --is-inside-work-tree 2>$null
-    if ($LASTEXITCODE -ne 0) { Fail "$PSScriptRoot non è un repository git." }
+    if ($LASTEXITCODE -ne 0) { Fail "$root non è un repository git." }
     if (-not (Test-Path gradlew.bat)) { Fail "manca gradlew.bat: generalo una volta con 'gradle wrapper --gradle-version 8.9'." }
 
     $branch = (git rev-parse --abbrev-ref HEAD 2>$null | Out-String).Trim()
@@ -102,7 +130,7 @@ try {
         $device = $devices | Where-Object { $_.Serial -eq $Serial } | Select-Object -First 1
         if (-not $device) { Fail "il dispositivo '$Serial' non è collegato (collegati: $(($devices | ForEach-Object { $_.Serial }) -join ', '))." }
     } elseif ($devices.Count -eq 0) {
-        Fail 'nessun telefono collegato: collegalo via USB con il debug USB attivo (o collegalo via Wi-Fi con .\pair-wifi.ps1).'
+        Fail 'nessun telefono collegato: collegalo via USB con il debug USB attivo (o collegalo via Wi-Fi con .\scripts\pair-wifi.ps1).'
     } elseif ($devices.Count -gt 1) {
         Fail "sono collegati più dispositivi ($(($devices | ForEach-Object { $_.Serial }) -join ', ')): scegli quale con -Serial <seriale>."
     } else {

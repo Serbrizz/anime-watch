@@ -26,9 +26,15 @@ Poi:
    Senza questo file, o con un altro keystore, la build si ferma con un messaggio che spiega cosa manca.
 2. Metti `google-services.json` in `app/`.
 3. Apri la cartella in Android Studio (JDK 17 o successivo) e premi Run. Da terminale: `.\gradlew.bat :app:assembleDebug`,
-   oppure `.\install.ps1` per aggiornare il codice, compilare e installare sul telefono collegato.
+   oppure `.\scripts\install.ps1` per aggiornare il codice, compilare e installare sul telefono collegato.
 
 Si lavora su `dev`; `main` riceve solo i merge per le release (CLAUDE.md §12).
+
+## Script
+
+Tutti gli script di sviluppo (installazione sul telefono, test, logcat, deploy di regole e proxy, release) stanno in
+`scripts/`. `.\gui.cmd` nella radice, anche con doppio clic, apre una finestra che li elenca con le loro opzioni e li lancia.
+Per aggiungerne uno basta un nuovo `.ps1` in `scripts/` (CLAUDE.md §8, "Script e GUI").
 
 ## Pubblicare una versione
 
@@ -37,7 +43,7 @@ Su Windows, con [GitHub CLI](https://cli.github.com) autenticata (`gh auth login
 ```
 git checkout main
 git merge dev
-.\release.cmd patch      # oppure minor / major
+.\scripts\release.cmd patch      # oppure minor / major
 ```
 
 Lo script controlla la configurazione e apre il Blocco note per le note di rilascio, che gli utenti vedranno nel popup.

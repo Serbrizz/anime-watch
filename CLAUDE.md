@@ -149,6 +149,14 @@ proxy/                          Cloudflare Worker "animewatch-ai" (fuori dall'ap
 ├─ src/firebase-auth.js         verifica degli ID token Firebase (firma RS256 con le chiavi di Google, aud/iss/exp/sub)
 ├─ test/                        node --test sulla verifica del token e sulle risposte TMDB ridotte
 └─ wrangler.toml                nome, variabili (progetto Firebase, modello, max token), limiti di richieste (Gemini e TMDB)
+
+scripts/                        tutti gli script e i comandi di sviluppo (PowerShell, Windows), lanciati dalla radice del repo
+├─ gui.ps1                      finestra che elenca gli altri script e li lancia (§8, "Script e GUI"); si apre con gui.cmd nella radice
+├─ install.ps1  pair-wifi.ps1  logcat.ps1          telefono
+├─ test.ps1  build.ps1                             app (Gradle)
+├─ deploy-rules.ps1                                regole Firestore
+├─ proxy-test/-deploy/-logs/-secret/-login.ps1     proxy
+└─ release.cmd / release.ps1                       release (§13)
 ```
 
 Dipendenze ammesse: `ui -> domain/data`, `domain -> data`, `data` non conosce `ui`. `RecommendationEngine` non deve
@@ -392,7 +400,8 @@ cambiare mai**. Dà accesso anche a tutto ciò che è firmato con lo stesso keys
 ### Proxy AI (Cloudflare Worker)
 L'app non ha bisogno di nessuna chiave. Conosce solo l'indirizzo del Worker, `aiProxyUrl` in `gradle.properties`: se è
 vuoto il pulsante Gemini non compare e le puntate restano col solo numero. Il Worker `animewatch-ai` è sull'account Cloudflare di chi lo gestisce; per
-modificarlo serve l'accesso a quell'account, che Cloudflare permette di condividere invitando membri. Da `proxy/`:
+modificarlo serve l'accesso a quell'account, che Cloudflare permette di condividere invitando membri. Da `proxy/`
+(test, deploy, log e segreti ci sono anche come `scripts\proxy-*.ps1`):
 ```
 npm install                                  # una volta: wrangler alla versione fissata
 npm test                                     # test della verifica del token
@@ -409,18 +418,55 @@ Cambiarli non richiede una nuova versione dell'app, basta un deploy. I modelli d
 
 ### Build e test
 ```
-./gradlew :app:testDebugUnitTest          # unit test (raccomandazioni, liste condivise, franchise, puntate, versioni, errori)
-./gradlew :app:assembleDebug              # APK in app/build/outputs/apk/debug/
-.\install.ps1 [-Release] [-Serial <id>]   # git fetch + pull --ff-only, build, adb install -r sul telefono collegato
+./gradlew :app:testDebugUnitTest                 # unit test (raccomandazioni, liste condivise, franchise, puntate, versioni, errori)
+./gradlew :app:assembleDebug                     # APK in app/build/outputs/apk/debug/
+.\scripts\install.ps1 [-Release] [-Serial <id>]  # git fetch + pull --ff-only, build, adb install -r sul telefono collegato
 ```
 `install.ps1` controlla git, adb e telefono prima di iniziare e si ferma al primo errore indicando passo e motivo
 (anche con Ctrl+C); il pull è solo fast-forward, quindi con branch divergenti non fa merge.
-`.\pair-wifi.ps1` collega il telefono via Wi-Fi: se è attaccato al cavo accende da solo il debug wireless, poi trova
+`.\scripts\pair-wifi.ps1` collega il telefono via Wi-Fi: se è attaccato al cavo accende da solo il debug wireless, poi trova
 indirizzo e porta via mDNS (la porta cambia a ogni accensione) e fa `adb connect`. Se il PC non è abbinato (la prima
 volta per ogni coppia PC-telefono) fa anche `adb pair`: si apre "Abbina dispositivo con codice" sul telefono e si
 scrive solo il codice, indirizzo e porta li trova da solo.
 Android Studio (Koala o successivo) apre la cartella e fa tutto da solo. La CI (`.github/workflows/build.yml`) usa il
 `google-services.json.example` come segnaposto, quindi compila senza segreti.
+
+### Script e GUI
+Ogni script o comando di sviluppo sta in `scripts/` (versionata), come `.ps1`; la radice del repo per lo script è
+`Split-Path -Parent $PSScriptRoot`. Unica eccezione `gui.cmd`, nella radice per trovarlo subito: anche con doppio clic
+(da Esplora file: VS Code apre i file, non li esegue) apre `scripts\gui.ps1`, una finestra WPF in stile anime
+giapponese (cielo di notte, colori piatti con contorni scuri e ombre nette, niente bagliori; font Yu Gothic UI) che li
+elenca e li lancia **al suo interno**: un `powershell` nascosto con input e output redirezionati (`AwRunner`, compilato
+con `Add-Type`), l'output colorato nel pannello in basso, una scheda per esecuzione con lo stato, un campo per
+rispondere quando lo script fa una domanda e "Ferma", che chiude lo script e i suoi processi tranne il server adb (terrebbe
+giù il Wi-Fi del telefono) e il daemon di Gradle. "In una console" lo apre invece in una finestra PowerShell separata.
+La finestra legge tutto dallo script, senza eseguirlo, quindi un comando nuovo è solo un nuovo `.ps1` in `scripts/`.
+Dal commento di aiuto iniziale:
+- `.FUNCTIONALITY` il titolo breve (senza, il nome del file); `.COMPONENT` il gruppo (senza, "Altro"), con icona in
+  `$groupIcons` e colore in `$groupThemes` di `gui.ps1` (Telefono blu, App verde, Firebase giallo, Proxy arancione,
+  Release rosa sakura), ripreso nell'elenco, nella scheda, nel pulsante Esegui e nelle esecuzioni;
+- `.SYNOPSIS` una frase su cosa fa, sotto il titolo nella scheda (l'elenco a sinistra mostra solo i titoli);
+  `.DESCRIPTION` ("Cosa fa") la spiegazione completa: cosa fa passo per passo, cosa succede se qualcosa va storto,
+  "Serve: ..." con i requisiti; paragrafi separati da una riga vuota, elenchi con `- ` o `1. `;
+  `.NOTES` ("Come si usa") i passi numerati, `1. ...` uno per riga (una riga che non inizia con un numero continua il
+  passo prima);
+- `param()` le opzioni, sempre visibili accanto a Esegui: `[switch]` è un interruttore, `[ValidateSet(...)]` una fila
+  di pulsanti, il resto testo. Di `.PARAMETER` la prima riga è il nome mostrato, il resto la spiegazione;
+  `[Parameter(DontShow)]` nasconde le opzioni solo da terminale, `Mandatory` le rende obbligatorie.
+**Questi testi sono per chi usa la finestra**, che sa più o meno cosa sta facendo: si spiega tutto nel dettaglio, con i
+termini tecnici dove servono (unit test, APK, adb, deploy), ma ogni passo dice concretamente cosa toccare e cosa
+aspettare, con le scritte che compaiono davvero nell'output ("la scritta verde FATTO").
+L'exit code dice l'esito: uno script che fallisce esce con `exit 1` (o con il codice del comando fallito).
+Senza un terminale vero alcune cose cambiano, e uno script deve funzionare in entrambi i modi:
+- una domanda si scrive con `Write-Host '...: ' -NoNewline` e poi `Read-Host` senza testo: con l'input redirezionato
+  `Read-Host 'testo'` non stampa il testo, e la finestra capisce che lo script aspetta dalla riga rimasta a metà;
+- `Read-Host` riscrive la risposta nell'output: un segreto si legge con `[Console]::In.ReadLine()` se
+  `[Console]::IsInputRedirected`, altrimenti con `Read-Host -AsSecureString` (che con l'input redirezionato si blocca);
+- i programmi che si accorgono di non avere un terminale cambiano comportamento: wrangler scrive i log in JSON
+  (`--format pretty`), legge i segreti dallo standard input e durante deploy e log non chiede l'accesso (si fa prima con
+  "Accedi a Cloudflare": `wrangler login` apre il browser anche senza terminale); la Firebase CLI segna con `+` invece
+  della spunta le righe riuscite.
+I file vanno salvati in UTF-8 **con BOM**: PowerShell 5.1 senza BOM legge male le lettere accentate.
 
 ## 9. Sicurezza e limiti noti
 
@@ -530,7 +576,7 @@ poteri e limiti del proprietario, eliminazione, migrazione). Il test non è nel 
 
 - **Versione:** unica fonte `appVersion` in `gradle.properties`. `versionName` è `appVersion`, `versionCode` è
   `major·10000 + minor·100 + patch` (minor e patch sotto 100). La incrementa solo lo script.
-- **Pubblicare** (Windows, da `main` dopo il merge di `dev`): `.\release.cmd patch|minor|major`. Lo script lo lancia chi
+- **Pubblicare** (Windows, da `main` dopo il merge di `dev`): `.\scripts\release.cmd patch|minor|major` (o "release" nella GUI degli script). Lo script lo lancia chi
   fa la release, non Claude. Richiede `keystore.properties`, il vero `app/google-services.json` e GitHub CLI
   autenticata con permesso di push (`gh auth login`).
   1. Controlla branch pulito e allineato a origin, `dev` già unito, tag libero e `:app:verifyReleaseConfig`.

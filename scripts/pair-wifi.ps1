@@ -1,13 +1,35 @@
 ﻿<#
 .SYNOPSIS
-    Collega il telefono ad adb via Wi-Fi (debug wireless), così install.ps1 e logcat funzionano senza cavo.
+    Collega il telefono ad adb via Wi-Fi (debug wireless), per installare l'app e leggere il logcat senza cavo.
 .DESCRIPTION
-    Se il telefono è collegato via USB accende da solo il debug wireless; altrimenti va acceso a mano sul telefono.
-    Trova indirizzo e porta via mDNS (la porta cambia a ogni accensione) e fa adb connect.
-    Se il PC non è ancora abbinato al telefono, guida l'abbinamento: si apre "Abbina dispositivo con codice" sul
-    telefono e si scrive il codice; indirizzo e porta li trova lo script.
+    Fa in sequenza:
+    - se il telefono è collegato con il cavo, accende da solo il debug wireless;
+    - cerca il telefono sulla rete e si collega: indirizzo e porta li trova da solo (la porta cambia ogni volta che
+      si accende il debug wireless);
+    - se questo PC non è mai stato abbinato al telefono, guida l'abbinamento con il codice di 6 cifre.
+
+    Il collegamento dura finché il telefono non si riavvia o non spegne il debug wireless: dopo basta rilanciare lo
+    script. L'abbinamento invece si fa una volta sola per ogni coppia PC-telefono.
+
+    Se lasci attaccato anche il cavo, adb vede due dispositivi: per installare stacca il cavo, oppure scegli il
+    telefono nell'opzione "Telefono" di "Installa sul telefono".
+
+    Serve: telefono e PC sulla stessa rete Wi-Fi e le opzioni sviluppatore attive sul telefono.
+.NOTES
+    1. Metti telefono e PC sulla stessa rete Wi-Fi.
+    2. Se puoi, collega il telefono con il cavo USB: il debug wireless si accende da solo. Senza cavo accendilo tu,
+       sul telefono: Impostazioni > Opzioni sviluppatore > Debug wireless.
+    3. Premi Esegui.
+    4. Se l'output dice che il PC non è abbinato: sul telefono apri Debug wireless > "Abbina dispositivo con
+       codice" e lascia aperta quella schermata. Quando lo chiede, scrivi il codice di 6 cifre nel campo in basso e premi
+       Invio. Se non trova il telefono da solo, chiede anche indirizzo e porta, che il telefono mostra sotto il codice.
+    5. Quando compare in verde "Collegato via Wi-Fi", puoi staccare il cavo.
+.FUNCTIONALITY
+    Collega il telefono via Wi-Fi
+.COMPONENT
+    Telefono
 .EXAMPLE
-    .\pair-wifi.ps1
+    .\scripts\pair-wifi.ps1
 #>
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Continue'
@@ -16,7 +38,7 @@ function Find-Adb {
     $cmd = Get-Command adb -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
     $sdks = @($env:ANDROID_HOME, $env:ANDROID_SDK_ROOT)
-    $props = Join-Path $PSScriptRoot 'local.properties'
+    $props = Join-Path (Split-Path -Parent $PSScriptRoot) 'local.properties'
     if (Test-Path $props) {
         $line = Get-Content $props | Where-Object { $_ -match '^\s*sdk\.dir\s*=' } | Select-Object -First 1
         if ($line) { $sdks += ($line -replace '^\s*sdk\.dir\s*=\s*', '' -replace '\\:', ':' -replace '\\\\', '\') }
@@ -34,8 +56,11 @@ function Fail([string]$reason) {
     exit 1
 }
 
+# La domanda con Write-Host e non come argomento di Read-Host: con l'input redirezionato (la GUI) Read-Host non la
+# stampa, e la GUI riconosce che si aspetta una risposta dalla riga rimasta a metà.
 function Ask([string]$prompt) {
-    try { return (Read-Host $prompt -ErrorAction Stop).Trim() }
+    Write-Host "${prompt}: " -NoNewline
+    try { return "$(Read-Host -ErrorAction Stop)".Trim() }
     catch { Fail "Non posso chiedere '$prompt': lancia lo script da un terminale interattivo." }
 }
 

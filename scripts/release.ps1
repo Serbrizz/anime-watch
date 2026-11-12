@@ -1,31 +1,41 @@
 ﻿<#
 .SYNOPSIS
-    Pubblica una nuova versione di AnimeWatch: versione, build, commit, tag, push e release su GitHub.
-
+    Pubblica una nuova versione di AnimeWatch su GitHub: chi ha l'app riceve il popup di aggiornamento.
 .DESCRIPTION
-    Si lancia da main, dopo aver fatto il merge di dev (CLAUDE.md §12).
+    Lavora in 6 passi e si ferma al primo problema, spiegando cosa fare:
+    1. Controlli: sei su main, senza modifiche non committate e allineato a GitHub; dev è già unito; il tag della
+       nuova versione è libero; ci sono il keystore condiviso, il vero google-services.json e GitHub CLI collegata.
+       Poi apre il Blocco note per le note di rilascio.
+    2. Versione: aumenta appVersion in gradle.properties.
+    3. Test e APK: lancia gli unit test e compila l'APK di release, controllando che sia firmato con il keystore giusto.
+    4. Commit, tag e push: dopo la tua conferma crea il commit di release e il tag, e li pubblica su GitHub insieme.
+    5. Release su GitHub: la crea con titolo, note e l'APK allegato.
+    6. Allineamento: porta dev allo stesso commit di main.
 
-    1. controlli: branch main pulito e allineato a origin, dev già unito, tag libero,
-       configurazione per la release (Gradle :app:verifyReleaseConfig: keystore
-       condiviso e google-services.json vero) e GitHub CLI.
-       Con gh pronta apre nel Blocco note un file temporaneo vuoto in cui scrivere le
-       note di rilascio (compaiono nel popup di aggiornamento dell'app): letto il
-       testo, il file si elimina
-    2. incrementa appVersion in gradle.properties (unica fonte della versione)
-    3. unit test e APK di release firmato (gradlew), copiato in build\release\AnimeWatch.apk;
-       controlla con apksigner che sia firmato con il certificato atteso
-    4. commit (dopo conferma) "chore(release): 🚀 release <versione>", tag annotato v<versione>
-       e push di main e tag insieme (--atomic: o tutti e due o nessuno)
-    5. release su GitHub con gh: titolo "AnimeWatch <versione>", le note e l'APK.
-       Senza gh apre la pagina della nuova release, da completare a mano
-    6. porta dev allo stesso commit di main (solo se è un avanzamento semplice)
+    Se qualcosa fallisce prima della conferma, o rispondi no, rimette tutto com'era: nessun commit, tag o push.
 
-    Se qualcosa fallisce prima del commit, o alla conferma rispondi no, lo script
-    rimette gradle.properties e build\release com'erano.
+    Le note di rilascio sono per chi usa l'app: cosa cambia per lui, in italiano semplice, con i trattini. Niente
+    dettagli di sviluppo (script, test, refactoring, nomi di file).
+
+    Serve: keystore.properties, il vero app\google-services.json e GitHub CLI collegata con permesso di push
+    (gh auth login).
+
+.NOTES
+    1. Porta in main le modifiche da pubblicare. In un terminale: git checkout main, poi git merge dev.
+    2. Scegli il tipo di versione nella colonna Opzioni, a destra.
+    3. Premi Esegui. Dopo i controlli si apre il Blocco note: scrivi le note di rilascio, salva, chiudi il Blocco
+       note e premi Invio nel campo in basso (anche vuoto).
+    4. Aspetta test e compilazione (alcuni minuti). Quando chiede "Procedere con ...? [s/N]", controlla il
+       riepilogo, scrivi s nel campo in basso e premi Invio.
+    5. Alla fine compare FATTO con la versione pubblicata. Per continuare a lavorare torna su dev: git checkout dev.
 
 .PARAMETER Bump
-    Obbligatorio: patch (1.2.3 -> 1.2.4), minor (1.2.3 -> 1.3.0) o major (1.2.3 -> 2.0.0).
-    Accettato anche come -patch / --patch.
+    Tipo di versione
+    major: cambiamenti importanti (1.2.3 diventa 2.0.0).
+
+    minor: novità (1.2.3 diventa 1.3.0).
+
+    patch: solo correzioni (1.2.3 diventa 1.2.4).
 
 .PARAMETER JavaHome
     JDK (17 o successivo) da usare per Gradle al posto di JAVA_HOME.
@@ -33,21 +43,37 @@
 .PARAMETER Yes
     Non chiede conferme (con -Yes un dev non ancora unito a main interrompe la release).
 
-.EXAMPLE
-    .\release.cmd minor
+.FUNCTIONALITY
+    Pubblica una release
+
+.COMPONENT
+    Release
 
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File release.ps1 patch -JavaHome "C:\Program Files\Java\jdk-17"
+    .\scripts\release.cmd minor
+
+.EXAMPLE
+    powershell -ExecutionPolicy Bypass -File scripts\release.ps1 patch -JavaHome "C:\Program Files\Java\jdk-17"
 #>
+# -Bump si accetta anche come -patch / --patch.
 param(
+    # ValidateSet: la GUI (scripts\gui.ps1) ne fa un menu. --patch non arriva qui ma in $Rest.
     [Parameter(Position = 0)]
+    [ValidateSet('major', 'minor', 'patch')]
     [string]$Bump = '',
+    # Forme alternative di -Bump: DontShow le nasconde nella GUI.
+    [Parameter(DontShow)]
     [switch]$Patch,
+    [Parameter(DontShow)]
     [switch]$Minor,
+    [Parameter(DontShow)]
     [switch]$Major,
+    # Opzioni da terminale, nascoste nella GUI: chi la usa non deve saltare le conferme né scegliere il JDK.
+    [Parameter(DontShow)]
     [string]$JavaHome = '',
+    [Parameter(DontShow)]
     [switch]$Yes,
-    [Parameter(ValueFromRemainingArguments = $true)]
+    [Parameter(DontShow, ValueFromRemainingArguments = $true)]
     [string[]]$Rest
 )
 
@@ -55,7 +81,8 @@ param(
 # intercettano con l'exit code.
 $ErrorActionPreference = 'Continue'
 
-$root = $PSScriptRoot
+# Lo script sta in scripts\, il repository è la cartella sopra.
+$root = Split-Path -Parent $PSScriptRoot
 $propsFile = Join-Path $root 'gradle.properties'
 $releaseBranch = 'main'
 $devBranch = 'dev'
@@ -114,7 +141,7 @@ function Ask([string]$question, [string]$choices) {
 function Show-Usage([string]$current) {
     Write-Host ''
     Write-Host '  Uso (da main, dopo il merge di dev)' -ForegroundColor White
-    Write-Host '    .\release.cmd ' -NoNewline -ForegroundColor Gray
+    Write-Host '    .\scripts\release.cmd ' -NoNewline -ForegroundColor Gray
     Write-Host '<patch|minor|major>' -NoNewline -ForegroundColor Yellow
     Write-Host ' [-Yes] [-JavaHome <jdk>]' -ForegroundColor DarkGray
     if ($current) {

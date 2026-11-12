@@ -21,8 +21,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -39,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.animewatch.data.model.AnimeList
@@ -46,6 +45,8 @@ import com.example.animewatch.data.model.Franchise
 import com.example.animewatch.data.model.ListRole
 import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.EmptyState
+import com.example.animewatch.ui.components.InkButton
+import com.example.animewatch.ui.components.InkCard
 import com.example.animewatch.ui.components.skeleton
 import com.example.animewatch.ui.components.ScreenBar
 import com.example.animewatch.ui.components.roleLabel
@@ -69,8 +70,13 @@ fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
     ScreenBar("Le mie liste")
 
     Scaffold(
+        containerColor = Color.Transparent,
         floatingActionButton = {
-            FloatingActionButton(onClick = { showCreate = true }) {
+            InkButton(
+                onClick = { showCreate = true },
+                shape = MaterialTheme.shapes.large,
+                contentPadding = PaddingValues(16.dp),
+            ) {
                 Icon(Icons.Default.Add, contentDescription = "Nuova lista")
             }
         },
@@ -104,7 +110,7 @@ fun ListsScreen(vm: AppViewModel, onOpenList: (String) -> Unit) {
                     // Le stagioni arrivano a ondate: i conteggi si mostrano solo a serie tutte ricostruite,
                     // altrimenti crescono sotto gli occhi. Chi non si è potuto risolvere non tiene in attesa.
                     val loading = list.animeIds.any { it !in franchises && it !in unresolved }
-                    ElevatedCard(onClick = { onOpenList(list.id) }, modifier = Modifier.fillMaxWidth()) {
+                    InkCard(onClick = { onOpenList(list.id) }, modifier = Modifier.fillMaxWidth()) {
                         Row(
                             Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,

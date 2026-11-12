@@ -32,9 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -69,6 +67,7 @@ import com.example.animewatch.data.model.Anime
 import com.example.animewatch.data.model.AnimeList
 import com.example.animewatch.data.model.Franchise
 import com.example.animewatch.ui.AppViewModel
+import com.example.animewatch.ui.theme.Night
 import kotlinx.coroutines.launch
 
 /**
@@ -127,7 +126,7 @@ fun AddToListSheet(vm: AppViewModel, anime: Anime, onDismiss: () -> Unit) {
                 )
             }
             item(key = "done") {
-                Button(onClick = close, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Fatto") }
+                InkButton(onClick = close, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Fatto") }
             }
         }
     }
@@ -160,7 +159,10 @@ private fun SheetHeader(anime: Anime) {
     }
 }
 
-/** Una lista come scheda da accendere e spegnere: colore e spunta cambiano con un piccolo rimbalzo. */
+/**
+ * Una lista come scheda da accendere e spegnere, come le opzioni della finestra degli script: spenta è rialzata col
+ * bordo sottile, accesa arancione piena col contorno a china. Colore e spunta cambiano con un piccolo rimbalzo.
+ */
 @Composable
 private fun ListChoice(
     list: AnimeList,
@@ -169,21 +171,15 @@ private fun ListChoice(
     onToggle: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = MaterialTheme.colorScheme
-    val container by animateColorAsState(
-        if (selected) colors.primaryContainer else colors.surfaceContainerHigh,
-        label = "sfondo lista",
-    )
-    val content by animateColorAsState(
-        if (selected) colors.onPrimaryContainer else colors.onSurface,
-        label = "testo lista",
-    )
+    val container by animateColorAsState(if (selected) Night.Accent else Night.Raised, label = "sfondo lista")
+    val content by animateColorAsState(if (selected) Night.AccentInk else Night.Text, label = "testo lista")
     Surface(
         checked = selected,
         onCheckedChange = onToggle,
         shape = RoundedCornerShape(16.dp),
         color = container,
         contentColor = content,
+        border = if (selected) BorderStroke(2.dp, Night.Ink) else BorderStroke(1.5.dp, Night.Line),
         modifier = modifier.fillMaxWidth(),
     ) {
         Row(
@@ -199,7 +195,14 @@ private fun ListChoice(
                 )
             }
             Spacer(Modifier.width(12.dp))
-            InListIcon(selected, addDescription = null, removeDescription = null, Modifier.size(28.dp))
+            // Sull'arancione la spunta prende il colore del testo, altrimenti sparirebbe.
+            InListIcon(
+                selected,
+                addDescription = null,
+                removeDescription = null,
+                Modifier.size(28.dp),
+                addedTint = content,
+            )
         }
     }
 }
@@ -211,6 +214,7 @@ fun InListIcon(
     addDescription: String?,
     removeDescription: String?,
     modifier: Modifier = Modifier,
+    addedTint: Color = MaterialTheme.colorScheme.primary,
 ) {
     AnimatedContent(
         targetState = inList,
@@ -224,7 +228,7 @@ fun InListIcon(
             Icon(
                 Icons.Default.CheckCircle,
                 contentDescription = removeDescription,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = addedTint,
                 modifier = modifier,
             )
         } else {
@@ -298,7 +302,7 @@ private fun NewListField(onCreate: (String) -> Unit, modifier: Modifier = Modifi
                         .focusRequester(focus),
                 )
                 Spacer(Modifier.width(8.dp))
-                FilledIconButton(onClick = submit, enabled = name.isNotBlank()) {
+                InkButton(onClick = submit, enabled = name.isNotBlank(), contentPadding = PaddingValues(12.dp)) {
                     Icon(Icons.Default.Check, contentDescription = "Crea la lista")
                 }
             }

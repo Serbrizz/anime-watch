@@ -9,17 +9,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -27,6 +25,9 @@ import com.example.animewatch.data.model.ListInvite
 import com.example.animewatch.data.model.ListRole
 import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.EmptyState
+import com.example.animewatch.ui.components.InkButton
+import com.example.animewatch.ui.components.InkCard
+import com.example.animewatch.ui.components.InkOutlinedButton
 import com.example.animewatch.ui.components.ScreenBar
 
 @Composable
@@ -36,7 +37,7 @@ fun InvitesScreen(vm: AppViewModel) {
 
     ScreenBar("Inviti")
 
-    Scaffold { padding ->
+    Scaffold(containerColor = Color.Transparent) { padding ->
         if (invites.isEmpty()) {
             EmptyState(
                 "Nessun invito. Quando qualcuno condivide una lista con la tua email Google, la trovi qui.",
@@ -70,7 +71,7 @@ private fun InviteCard(
     onAccept: () -> Unit,
     onDecline: () -> Unit,
 ) {
-    ElevatedCard(Modifier.fillMaxWidth()) {
+    InkCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(invite.listName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
@@ -84,8 +85,8 @@ private fun InviteCard(
                 Modifier.fillMaxWidth().padding(top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, androidx.compose.ui.Alignment.End),
             ) {
-                OutlinedButton(onClick = onDecline, enabled = enabled) { Text("Rifiuta") }
-                Button(onClick = onAccept, enabled = enabled) {
+                InkOutlinedButton(onClick = onDecline, enabled = enabled) { Text("Rifiuta") }
+                InkButton(onClick = onAccept, enabled = enabled) {
                     if (busy) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(18.dp),

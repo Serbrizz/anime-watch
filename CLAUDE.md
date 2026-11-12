@@ -49,7 +49,7 @@ liste condivise (commenti, profili pubblici), tracciamento dei voti personali, t
 | Area | Scelta | Versione |
 |---|---|---|
 | Linguaggio | Kotlin | 2.0.20 |
-| UI | Jetpack Compose + Material 3 (Material You su Android 12+) | BOM 2024.09.03 |
+| UI | Jetpack Compose + Material 3, tema notturno fisso nello stile della GUI degli script (niente Material You, sempre scuro), font Nunito | BOM 2024.09.03 |
 | Navigazione | Navigation Compose, rotte stringa | 2.8.2 |
 | Architettura | MVVM, `StateFlow`, un `AppViewModel` condiviso + un ViewModel per Cerca, Consigliati e aggiornamenti | Lifecycle 2.8.6 |
 | DI | Manuale (`di/AppContainer.kt`), niente Hilt | — |
@@ -135,12 +135,13 @@ app/src/main/java/com/example/animewatch/
    ├─ AppViewModel.kt          utente, liste, inviti, progressi, cache schede, azioni
    ├─ ErrorMessages.kt         testi d'errore per l'utente secondo AppErrors; il dettaglio va ad AppLog
    ├─ components/Common.kt     AnimeRow, CoverImage, UserAvatar, EmptyState, etichette
+   ├─ components/Ink.kt        stile della GUI: NightSky (cielo), inkPanel/InkCard, InkButton, InkOutlinedButton, InkSegment, InkTag
    ├─ components/Skeleton.kt   skeleton di attesa: forma pulsante, righe di testo, righe di anime
    ├─ components/AddToListSheet.kt  pannello dal basso "Aggiungi a una lista" (anche crea una lista con l'anime dentro)
    ├─ components/ScreenBar.kt  titolo e azioni che ogni schermata dichiara per la barra in alto comune
    ├─ login/  lists/  invites/  detail/  search/  recs/  profile/   una cartella per schermata (profile/ ha anche InfoScreen)
    ├─ update/                  UpdateViewModel (quando controllare, popup una volta per versione), UpdateDialog, UpdatesScreen
-   └─ theme/Theme.kt
+   └─ theme/Theme.kt           palette `Night` (quella di gui.ps1), colori Material, Nunito (res/font, i file di scripts/fonts), forme
 
 proxy/                          Cloudflare Worker "animewatch-ai" (fuori dall'app, deploy con wrangler)
 ├─ src/index.js                 POST /chat/completions: token Firebase, limite per utente, modello fisso, traduzione per Gemini;
@@ -152,7 +153,7 @@ proxy/                          Cloudflare Worker "animewatch-ai" (fuori dall'ap
 
 scripts/                        tutti gli script e i comandi di sviluppo (PowerShell, Windows), lanciati dalla radice del repo
 ├─ gui.ps1                      finestra che elenca gli altri script e li lancia (§8, "Script e GUI"); si apre con gui.cmd nella radice
-├─ fonts/                       font della finestra (M PLUS Rounded 1c, Nunito; OFL), ridotti ai caratteri usati
+├─ fonts/                       font della finestra (M PLUS Rounded 1c, Nunito; OFL), ridotti ai caratteri usati; Nunito è copiato anche in app/src/main/res/font
 ├─ install.ps1  pair-wifi.ps1  logcat.ps1          telefono
 ├─ test.ps1  build.ps1                             app (Gradle)
 ├─ deploy-rules.ps1                                regole Firestore
@@ -566,6 +567,14 @@ poteri e limiti del proprietario, eliminazione, migrazione). Il test non è nel 
 
 - Kotlin ufficiale (`kotlin.code.style=official`), 4 spazi, righe ragionevoli (~120).
 - Nessuna logica di business nei composable: azioni nei ViewModel, regole di dominio in `data/model` o `domain`.
+- Lo stile è quello della GUI degli script (§8): cielo di notte, colori piatti, contorni "a china" e ombre nette, niente
+  bagliori né ombre sfumate. Schede e pulsanti vengono da `ui/components/Ink.kt` (`InkCard`, `InkButton` per l'azione
+  principale, `InkOutlinedButton` per le altre, `InkSegment` per scegliere fra poche opzioni), non da `Card`/`Button` di
+  Material; i colori da `MaterialTheme.colorScheme` o da `Night`. Il cielo (`NightSky`) è dietro a tutto: ogni `Scaffold`
+  ha `containerColor = Color.Transparent`, e per questo il colore del testo predefinito lo fissa il tema (`LocalContentColor`
+  chiaro: altrimenti su un fondo trasparente sarebbe nero). L'ombra di `inkPanel` esce di 5 dp in basso a destra: serve
+  spazio attorno. Un pulsante disattivato non si sbiadisce con la trasparenza (sul cielo diventerebbe illeggibile): passa
+  a fondo rialzato e testo tenue.
 - Un contenuto che sta arrivando si aspetta con uno skeleton (`ui/components/Skeleton.kt`) delle sue misure, così la pagina
   non si sposta; gli indicatori rotondi e le barre restano per le azioni e gli avanzamenti (pulsanti, Gemini, download).
 - Gli stati sono `StateFlow` immutabili; le schermate usano `collectAsStateWithLifecycle()`.

@@ -18,16 +18,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -40,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -49,6 +47,9 @@ import com.example.animewatch.data.model.ListInvite
 import com.example.animewatch.data.model.ListRole
 import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.EmptyState
+import com.example.animewatch.ui.components.InkButton
+import com.example.animewatch.ui.components.InkOutlinedButton
+import com.example.animewatch.ui.components.InkSegment
 import com.example.animewatch.ui.components.ScreenBar
 import com.example.animewatch.ui.components.UserAvatar
 import com.example.animewatch.ui.components.roleLabel
@@ -66,7 +67,7 @@ fun ListMembersScreen(vm: AppViewModel, listId: String, onLeft: () -> Unit) {
 
     ScreenBar(list?.name?.let { "Condivisione · $it" } ?: "Condivisione")
 
-    Scaffold { padding ->
+    Scaffold(containerColor = Color.Transparent) { padding ->
         if (list == null) {
             EmptyState("Lista non trovata.", Modifier.padding(padding))
             return@Scaffold
@@ -110,7 +111,7 @@ fun ListMembersScreen(vm: AppViewModel, listId: String, onLeft: () -> Unit) {
             if (!isOwner) {
                 item(key = "leave") {
                     Spacer(Modifier.padding(top = 8.dp))
-                    OutlinedButton(onClick = { confirmLeave = true }, modifier = Modifier.fillMaxWidth()) {
+                    InkOutlinedButton(onClick = { confirmLeave = true }, modifier = Modifier.fillMaxWidth()) {
                         Text("Esci dalla lista")
                     }
                 }
@@ -187,14 +188,12 @@ private fun InviteForm(myEmail: String, onSend: (email: String, role: ListRole) 
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(ListRole.EDITOR, ListRole.VIEWER).forEach { option ->
-                FilterChip(
-                    selected = role == option,
-                    onClick = { role = option },
-                    label = { Text(if (option == ListRole.EDITOR) "Può modificare" else "Può solo vedere") },
-                )
+                InkSegment(selected = role == option, onClick = { role = option }) {
+                    Text(if (option == ListRole.EDITOR) "Può modificare" else "Può solo vedere")
+                }
             }
         }
-        Button(
+        InkButton(
             onClick = {
                 onSend(clean, role)
                 sent = clean

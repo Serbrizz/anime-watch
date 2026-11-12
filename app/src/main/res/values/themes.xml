@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Tema di sistema minimo: l'aspetto reale è in Compose (ui/theme/Theme.kt). -->
-    <style name="Theme.AnimeWatch" parent="android:Theme.Material.Light.NoActionBar" />
+    <!--
+        Tema di sistema minimo: l'aspetto reale è in Compose (ui/theme/Theme.kt). Scuro e coi colori del cielo di notte,
+        così all'avvio non lampeggia il bianco e le barre di sistema si accordano con l'app.
+    -->
+    <style name="Theme.AnimeWatch" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF141A33</item>
+        <item name="android:statusBarColor">#FF121833</item>
+        <item name="android:navigationBarColor">#FF1A2142</item>
+    </style>
 </resources>

@@ -1,7 +1,6 @@
 package com.example.animewatch.ui.profile
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,12 +20,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.colorResource
@@ -35,7 +32,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.animewatch.BuildConfig
 import com.example.animewatch.R
+import com.example.animewatch.ui.components.InkCard
 import com.example.animewatch.ui.components.ScreenBar
+import com.example.animewatch.ui.components.inkPanel
 import com.example.animewatch.ui.recs.GeminiLogo
 
 /**
@@ -88,6 +87,13 @@ fun InfoScreen() {
                 "visto, non il tuo nome né la tua email.",
             logo = { GeminiLogo(green = 0f, modifier = Modifier.size(32.dp)) },
         )
+        // La licenza OFL chiede di citare il font distribuito con l'app.
+        Text(
+            "Carattere: Nunito, © The Nunito Project Authors, SIL Open Font License 1.1.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+        )
     }
 }
 
@@ -99,8 +105,7 @@ private fun AppHeader() {
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .size(88.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(colorResource(R.color.ic_launcher_background)),
+                .inkPanel(RoundedCornerShape(24.dp), colorResource(R.color.ic_launcher_background)),
         ) {
             // Il primo piano di un'icona adattiva è 108 dp, di cui si vedono i 72 centrali: si ingrandisce di 1,5.
             Image(
@@ -111,6 +116,7 @@ private fun AppHeader() {
         }
         Spacer(Modifier.height(16.dp))
         Text("AnimeWatch", style = MaterialTheme.typography.headlineSmall)
+        Text("アニメウォッチ", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
         Text(
             "Versione ${BuildConfig.VERSION_NAME}",
             style = MaterialTheme.typography.bodyMedium,
@@ -135,7 +141,7 @@ private fun SourceCard(
     note: String? = null,
 ) {
     val uriHandler = LocalUriHandler.current
-    OutlinedCard(onClick = { runCatching { uriHandler.openUri(url) } }, modifier = Modifier.fillMaxWidth()) {
+    InkCard(onClick = { runCatching { uriHandler.openUri(url) } }, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { logo() }

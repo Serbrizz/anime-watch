@@ -13,13 +13,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,6 +25,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.animewatch.ui.components.InkButton
+import com.example.animewatch.ui.components.InkCard
+import com.example.animewatch.ui.components.InkOutlinedButton
 import com.example.animewatch.ui.components.ScreenBar
 
 /**
@@ -45,7 +45,7 @@ fun UpdatesScreen(vm: UpdateViewModel) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        ElevatedCard(Modifier.fillMaxWidth()) {
+        InkCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("AnimeWatch", style = MaterialTheme.typography.titleMedium)
                 VersionRow("Versione installata", vm.currentVersion)
@@ -54,13 +54,13 @@ fun UpdatesScreen(vm: UpdateViewModel) {
                 }
                 Spacer(Modifier.size(4.dp))
                 if (available != null) {
-                    Button(
+                    InkButton(
                         onClick = vm::openDialog,
                         enabled = !state.downloading,
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("Aggiorna alla versione ${available.version}") }
                 } else {
-                    OutlinedButton(
+                    InkOutlinedButton(
                         onClick = vm::checkNow,
                         enabled = !state.checking,
                         modifier = Modifier.fillMaxWidth(),

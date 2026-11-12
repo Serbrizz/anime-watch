@@ -3,6 +3,7 @@
 package com.example.animewatch.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.animewatch.data.model.Anime
 import com.example.animewatch.data.model.ListRole
+import com.example.animewatch.ui.theme.Night
 
 fun statusLabel(status: String?): String = when (status) {
     "FINISHED" -> "Concluso"
@@ -90,15 +92,18 @@ fun UserAvatar(photoUrl: String?, modifier: Modifier = Modifier, size: Dp = 40.d
     }
 }
 
+/** Copertina con il contorno a china, come le immagini disegnate. */
 @Composable
 fun CoverImage(url: String?, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(8.dp)
     AsyncImage(
         model = url,
         contentDescription = null,
         contentScale = ContentScale.Crop,
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.5.dp, Night.Ink, shape),
     )
 }
 

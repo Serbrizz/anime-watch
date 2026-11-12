@@ -5,7 +5,6 @@ package com.example.animewatch.ui
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -21,11 +20,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -33,6 +34,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
@@ -54,6 +58,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.animewatch.di.AppContainer
 import com.example.animewatch.ui.components.LocalScreenBars
+import com.example.animewatch.ui.components.NightSky
 import com.example.animewatch.ui.components.ScreenBars
 import com.example.animewatch.ui.components.UserAvatar
 import com.example.animewatch.ui.detail.AnimeDetailScreen
@@ -68,6 +73,7 @@ import com.example.animewatch.ui.recs.RecommendationsScreen
 import com.example.animewatch.ui.recs.RecommendationsViewModel
 import com.example.animewatch.ui.search.SearchScreen
 import com.example.animewatch.ui.search.SearchViewModel
+import com.example.animewatch.ui.theme.Night
 import com.example.animewatch.ui.update.UpdateDialog
 import com.example.animewatch.ui.update.UpdateViewModel
 import com.example.animewatch.ui.update.UpdatesScreen
@@ -120,11 +126,11 @@ fun AnimeWatchRoot(container: AppContainer) {
     }
 
     when (authState) {
-        // Sfondo vuoto per un istante, così all'avvio non lampeggia il login se la sessione c'è già.
-        AuthState.Loading -> Surface(Modifier.fillMaxSize()) {}
+        // Solo il cielo per un istante, così all'avvio non lampeggia il login se la sessione c'è già.
+        AuthState.Loading -> NightSky()
         AuthState.SignedOut -> LoginScreen(appVm)
         // La navigazione vive qui dentro: all'uscita viene scartata e il prossimo accesso riparte da Liste.
-        is AuthState.SignedIn -> MainContent(container, appVm, updateVm)
+        is AuthState.SignedIn -> NightSky { MainContent(container, appVm, updateVm) }
     }
 
     if (update.dialogOpen) {
@@ -147,11 +153,17 @@ private fun MainContent(container: AppContainer, appVm: AppViewModel, updateVm: 
 
     // Una barra in alto per tutte le schermate: ognuna dichiara solo titolo e azioni con ScreenBar.
     CompositionLocalProvider(LocalScreenBars provides bars) {
+        // Trasparente, come le schermate dentro: dietro c'è il cielo (NightSky).
         Scaffold(
+            containerColor = Color.Transparent,
             topBar = {
                 val spec = bars[backStack]
                 val section = topLevel.firstOrNull { it.route == destination?.route }
                 TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent,
+                    ),
                     title = {
                         // Una sezione della barra in basso che non dichiara ScreenBar prende la propria etichetta.
                         Text(spec?.title ?: section?.label.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -177,7 +189,14 @@ private fun MainContent(container: AppContainer, appVm: AppViewModel, updateVm: 
             bottomBar = {
                 // Anche dentro liste e schede; non nel Profilo, che si apre dalla foto e non è una sezione.
                 if (destination != null && destination.route?.startsWith(Routes.PROFILE) != true) {
-                    NavigationBar {
+                    // Pannello piatto con un contorno a china in alto; la sezione accesa è una pillola arancione.
+                    NavigationBar(
+                        containerColor = Night.Panel,
+                        tonalElevation = 0.dp,
+                        modifier = Modifier.drawBehind {
+                            drawLine(Night.Ink, Offset.Zero, Offset(size.width, 0f), strokeWidth = 2.dp.toPx())
+                        },
+                    ) {
                         topLevel.forEach { item ->
                             NavigationBarItem(
                                 selected = item.route == currentSection,
@@ -196,6 +215,13 @@ private fun MainContent(container: AppContainer, appVm: AppViewModel, updateVm: 
                                 },
                                 icon = { Icon(item.icon, contentDescription = null) },
                                 label = { Text(item.label) },
+                                colors = NavigationBarItemDefaults.colors(
+                                    indicatorColor = Night.Accent,
+                                    selectedIconColor = Night.AccentInk,
+                                    selectedTextColor = Night.Accent,
+                                    unselectedIconColor = Night.Muted,
+                                    unselectedTextColor = Night.Muted,
+                                ),
                             )
                         }
                     }

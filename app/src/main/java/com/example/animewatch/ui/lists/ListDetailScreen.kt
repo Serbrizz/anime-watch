@@ -1,8 +1,10 @@
 package com.example.animewatch.ui.lists
 
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -10,7 +12,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -23,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.animewatch.data.model.Anime
@@ -30,6 +32,7 @@ import com.example.animewatch.data.model.Franchise
 import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.AnimeRow
 import com.example.animewatch.ui.components.EmptyState
+import com.example.animewatch.ui.components.InkButton
 import com.example.animewatch.ui.components.SkeletonAnimeRow
 import com.example.animewatch.ui.components.ScreenBar
 
@@ -122,13 +125,18 @@ fun ListDetailScreen(
     }
 
     Scaffold(
+        containerColor = Color.Transparent,
         floatingActionButton = {
             if (canEdit) {
-                ExtendedFloatingActionButton(
+                InkButton(
                     onClick = onAddAnime,
-                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("Aggiungi anime") },
-                )
+                    shape = MaterialTheme.shapes.large,
+                    contentPadding = PaddingValues(start = 16.dp, end = 20.dp, top = 16.dp, bottom = 16.dp),
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Aggiungi anime")
+                }
             }
         },
     ) { padding ->

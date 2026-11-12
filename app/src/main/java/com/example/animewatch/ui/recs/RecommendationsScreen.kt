@@ -40,6 +40,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.animewatch.data.model.Anime
@@ -95,7 +96,7 @@ fun RecommendationsScreen(
         }
     }
 
-    Scaffold { padding ->
+    Scaffold(containerColor = Color.Transparent) { padding ->
         Column(Modifier.padding(padding)) {
             if (topGenres.isEmpty()) {
                 EmptyState("Segna qualche puntata come vista: i consigli si basano sui generi che guardi.")

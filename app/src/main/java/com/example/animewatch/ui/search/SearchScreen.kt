@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -77,7 +78,7 @@ fun SearchScreen(
 
     ScreenBar(targetList?.let { "Aggiungi a ${it.name}" } ?: "Cerca anime")
 
-    Scaffold { padding ->
+    Scaffold(containerColor = Color.Transparent) { padding ->
         Column(Modifier.padding(padding)) {
             OutlinedTextField(
                 value = state.query,

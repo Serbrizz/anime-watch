@@ -3,6 +3,7 @@
 package com.example.animewatch.ui.detail
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,8 +23,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
@@ -35,7 +34,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -66,10 +64,14 @@ import com.example.animewatch.data.model.Franchise
 import com.example.animewatch.ui.AppViewModel
 import com.example.animewatch.ui.components.AddToListSheet
 import com.example.animewatch.ui.components.CoverImage
+import com.example.animewatch.ui.components.InkButton
+import com.example.animewatch.ui.components.InkOutlinedButton
+import com.example.animewatch.ui.components.InkTag
 import com.example.animewatch.ui.components.ScreenBar
 import com.example.animewatch.ui.components.SkeletonText
 import com.example.animewatch.ui.components.skeleton
 import com.example.animewatch.ui.components.statusLabel
+import com.example.animewatch.ui.theme.Night
 import java.util.Locale
 
 @Composable
@@ -104,7 +106,7 @@ fun AnimeDetailScreen(vm: AppViewModel, animeId: Int) {
 
     ScreenBar(seasons.firstOrNull()?.englishOrRomaji ?: anime?.englishOrRomaji ?: "")
 
-    Scaffold { padding ->
+    Scaffold(containerColor = Color.Transparent) { padding ->
         if (anime == null) {
             DetailSkeleton(Modifier.padding(padding))
             return@Scaffold
@@ -150,8 +152,11 @@ fun AnimeDetailScreen(vm: AppViewModel, animeId: Int) {
 
             if (anime.genres.isNotEmpty()) {
                 item {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        anime.genres.forEach { AssistChip(onClick = {}, label = { Text(it) }) }
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        anime.genres.forEach { InkTag(it) }
                     }
                 }
             }
@@ -178,7 +183,7 @@ fun AnimeDetailScreen(vm: AppViewModel, animeId: Int) {
             }
 
             item {
-                OutlinedButton(onClick = { showAddSheet = true }, modifier = Modifier.fillMaxWidth()) {
+                InkOutlinedButton(onClick = { showAddSheet = true }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Text("  Aggiungi a una lista")
                 }
@@ -231,11 +236,11 @@ fun AnimeDetailScreen(vm: AppViewModel, animeId: Int) {
                             )
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
+                            InkButton(
                                 onClick = { vm.markAllWatched(anime) },
                                 enabled = watched.size < total,
                             ) { Text("Segna tutte come viste") }
-                            OutlinedButton(
+                            InkOutlinedButton(
                                 onClick = { vm.clearProgress(anime) },
                                 enabled = watched.isNotEmpty(),
                             ) { Text("Azzera") }
@@ -295,7 +300,7 @@ private fun DetailSkeleton(modifier: Modifier = Modifier) {
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            repeat(3) { Box(Modifier.size(width = 88.dp, height = 32.dp).skeleton(RoundedCornerShape(8.dp))) }
+            repeat(3) { Box(Modifier.size(width = 88.dp, height = 28.dp).skeleton(RoundedCornerShape(50))) }
         }
         SkeletonText(5, MaterialTheme.typography.bodyMedium)
     }
@@ -324,6 +329,7 @@ private fun EpisodeRow(number: Int, episode: Episode?, loading: Boolean, watched
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .size(width = 128.dp, height = 72.dp)
+                .border(1.5.dp, Night.Ink, RoundedCornerShape(8.dp))
                 .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
